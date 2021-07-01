@@ -5,12 +5,12 @@ riscv uart implementation on de10 lite FPGA board
 Part of project to build cpu chip to run [KernOS](https://github.com/kernyan/KernOS)
 
 ## components
-uart
-riscv [picosov](https://github.com/cliffordwolf/picorv32)
+1. uart
+2. riscv [picosov](https://github.com/cliffordwolf/picorv32)
 
 ## pins
-uart receive  - PIN_V10 GPIO[0]
-uart transmit - PIN_W10 GPIO[1]
+1. uart receive  - PIN_V10 GPIO[0]
+2. uart transmit - PIN_W10 GPIO[1]
 
 ## workflow
 1. Compile using riscv toolchain src/main.c into firmware.hex
