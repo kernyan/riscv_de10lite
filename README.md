@@ -24,3 +24,6 @@ scripts/go.sh
 ## todo
 1. reimplement riscv module
 2. reimplement uart module
+
+## reference
+1. [geohot/tinygrad](https://github.com/geohot/tinygrad/tree/master/accel/fpga)
