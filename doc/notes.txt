@@ -1,0 +1,12 @@
+# Tricky things
+
+## main.c
+1. doesn't have stack set up so ensure compiled output doesn't use 'sp'
+  - check using riscv-embed-none-objdump -d a.out | grep sp
+2. in src/riscv.v, firmware.hex maps to 64 4 bytes word, thus firmware.hex <= 64 lines
+
+## on linux
+1. by default, usb-uart device might not have write access
+  - lsusb to check usb-uart device
+  - ll /dev/usb/bus_id
+  - chmod 666 'device_id'
