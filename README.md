@@ -19,7 +19,7 @@ uart transmit - PIN_W10 GPIO[1]
 
 ## compile
 ```bash
-./go.sh
+scripts/go.sh
 ```
 ## todo
 1. reimplement riscv module
