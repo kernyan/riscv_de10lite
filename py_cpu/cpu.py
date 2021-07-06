@@ -41,15 +41,32 @@ class Rom:
 class Ops(Enum):
   INVALID = 0b0
   JAL = 0b1101111
-  ADDI = 0b0010011
+  IMM = ADDI = SLTI = SLTIU = XORI = ORI = ANDI = SLLI = SRLI = SRAI = 0b0010011
+
+class Funct3(Enum):
+  ADDI = 0b000
+  SLLI = 0b001
+  SLTI = 0b010
+  SLTIU = 0b011
+  XORI = 0b100
+  SRLI = SRAI = 0b101
+  ORI = 0b110
+  ANDI = 0b111
+
+def se(brange, size):
+    if brange & (1 << (size - 1)):
+        return (1 << 32) - ((1 << size) - brange)
+    return brange
 
 class CPU:
-        
   def __init__(self):
     self.ins = 0
     self.ops = Ops(0)
     self.cont = True
     self.imm_r = 0
+
+  def funct3(self):
+    return Funct3(self.bits(14,12))
 
   def bits(self, s, e):
     return (self.ins >> e) & ((1 << (s - e + 1)) - 1)
@@ -62,14 +79,21 @@ class CPU:
     self.ops = Ops(self.bits(6,0))
 
   def execute(self):
-
     if self.ops == Ops.JAL:
         print('%r' % self.ops)
         reg['pc'] += self.imm_r
         rd = self.bits(11,7)
         reg[rname[rd]] = reg['pc'] + 4
-        dump()
+    elif self.ops == Ops.IMM:
+        if self.funct3() == Funct3.ADDI:
+            print('%r' % self.funct3())
+            reg['pc'] += 4
+            exit(0)
+        else:
+            dump()
+            raise Exception('Write %r' % self.ops)
     else:
+        dump()
         raise Exception('Write %r' % self.ops)
     pass
     
@@ -91,8 +115,12 @@ def dump():
     if (i + 1) % 4 == 0:
       out += '\n'
   print(''.join(out))
+  print('{0:032b}'.format(cpu.ins))
  
 if __name__ == '__main__':
+  print('%x' % se(0xffb8, 16))
+  exit(0)
+
   for i in glob.glob('../../riscv-tests/isa/rv32ui-p-*'):
     if i.endswith('.dump'):
       continue
