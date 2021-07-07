@@ -64,6 +64,7 @@ class CPU:
     self.ops = Ops(0)
     self.cont = True
     self.imm_r = 0
+    self.imm_i = 0
 
   def funct3(self):
     return Funct3(self.bits(14,12))
@@ -71,24 +72,34 @@ class CPU:
   def bits(self, s, e):
     return (self.ins >> e) & ((1 << (s - e + 1)) - 1)
 
+  def rd(self):
+    return self.bits(11, 7)
+
+  def rs1(self):
+    return self.bits(19, 15)
+
+  def rs2(self):
+    return self.bits(24, 20)
+
+  def fetch(self):
+    self.ins = rom[reg['pc']]
+
   def decode(self):
     self.imm_r = (self.bits(30,21) << 1) | (self.bits(20,20) << 11) \
                 | (self.bits(19,12) << 12) | (self.bits(31,31) << 20)
-    
-    print('opcode: %s' % bin(self.bits(6,0)))
+    self.imm_i = self.bits(31,20)
     self.ops = Ops(self.bits(6,0))
+    print('ins: %08x rd: %3s opcode: %r' % (self.ins, rname[self.rd()], self.ops))
 
   def execute(self):
+    rd = self.rd()
     if self.ops == Ops.JAL:
-        print('%r' % self.ops)
         reg['pc'] += self.imm_r
-        rd = self.bits(11,7)
         reg[rname[rd]] = reg['pc'] + 4
     elif self.ops == Ops.IMM:
         if self.funct3() == Funct3.ADDI:
-            print('%r' % self.funct3())
+            reg[rname[rd]] = self.imm_i
             reg['pc'] += 4
-            exit(0)
         else:
             dump()
             raise Exception('Write %r' % self.ops)
@@ -98,8 +109,7 @@ class CPU:
     pass
     
   def step(self):
-    self.ins = rom[reg['pc']]
-    print('ins: %08x' % self.ins)
+    self.fetch()
     self.decode()
     self.execute()
     return self.cont
@@ -118,9 +128,6 @@ def dump():
   print('{0:032b}'.format(cpu.ins))
  
 if __name__ == '__main__':
-  print('%x' % se(0xffb8, 16))
-  exit(0)
-
   for i in glob.glob('../../riscv-tests/isa/rv32ui-p-*'):
     if i.endswith('.dump'):
       continue
