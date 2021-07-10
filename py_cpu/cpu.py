@@ -43,6 +43,9 @@ class Ops(Enum):
   JAL = 0b1101111
   IMM = ADDI = SLTI = SLTIU = XORI = ORI = ANDI = SLLI = SRLI = SRAI = 0b0010011
 
+  # systems
+  SYS = 0b1110011
+
 class Funct3(Enum):
   ADDI = 0b000
   SLLI = 0b001
@@ -88,7 +91,12 @@ class CPU:
     self.imm_r = (self.bits(30,21) << 1) | (self.bits(20,20) << 11) \
                 | (self.bits(19,12) << 12) | (self.bits(31,31) << 20)
     self.imm_i = self.bits(31,20)
-    self.ops = Ops(self.bits(6,0))
+    try:
+        self.ops = Ops(self.bits(6,0))
+    except:
+        print('Write opcode {0:06b}'.format(self.bits(6,0)))
+        dump()
+        exit(0)
     print('ins: %08x rd: %3s opcode: %r' % (self.ins, rname[self.rd()], self.ops))
 
   def execute(self):
@@ -102,7 +110,9 @@ class CPU:
             reg['pc'] += 4
         else:
             dump()
-            raise Exception('Write %r' % self.ops)
+            raise Exception('Write %r' % self.funct3())
+    elif self.ops == Ops.SYS:
+        reg['pc'] += 4
     else:
         dump()
         raise Exception('Write %r' % self.ops)
@@ -125,7 +135,7 @@ def dump():
     if (i + 1) % 4 == 0:
       out += '\n'
   print(''.join(out))
-  print('{0:032b}'.format(cpu.ins))
+  print('Instruction: {0:032b}'.format(cpu.ins))
  
 if __name__ == '__main__':
   for i in glob.glob('../../riscv-tests/isa/rv32ui-p-*'):
