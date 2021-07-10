@@ -56,9 +56,22 @@ class Funct3(Enum):
   ORI = 0b110
   ANDI = 0b111
 
+  # Ops.SYS redefition of Funct3 bits
+  ECALL = 0b000
+  CSRRW = 0b001
+  CSRRS = 0b010
+  CSRRC = 0b011
+  CSRRWI = 0b101
+  CSRRSI = 0b110
+  CSRRCI = 0b111
+
+def panic(msg):
+    dump()
+    raise Exception(msg)
+
 def se(brange, size):
-    if brange & (1 << (size - 1)):
-        return (1 << 32) - ((1 << size) - brange)
+    if brange & (1 << size):
+        return (1 << 32) - ((1 << (size + 1)) - brange)
     return brange
 
 class CPU:
@@ -66,16 +79,19 @@ class CPU:
     self.ins = 0
     self.ops = Ops(0)
     self.cont = True
-    self.imm_r = 0
     self.imm_i = 0
+    self.imm_s = 0
+    self.imm_b = 0
+    self.imm_u = 0
+    self.imm_j = 0
 
   def funct3(self):
-    return Funct3(self.bits(14,12))
+    return self.bits(14,12)
 
-  def bits(self, s, e):
-    return (self.ins >> e) & ((1 << (s - e + 1)) - 1)
+  def bits(self, s, e, lshift = 0):
+    return ((self.ins >> e) & ((1 << (s - e + 1)) - 1)) << lshift
 
-  def rd(self):
+  def rd(self, pos = 0):
     return self.bits(11, 7)
 
   def rs1(self):
@@ -88,35 +104,41 @@ class CPU:
     self.ins = rom[reg['pc']]
 
   def decode(self):
-    self.imm_r = (self.bits(30,21) << 1) | (self.bits(20,20) << 11) \
-                | (self.bits(19,12) << 12) | (self.bits(31,31) << 20)
-    self.imm_i = self.bits(31,20)
+    self.ops = self.bits(6,0)
+    self.imm_i = se(self.bits(31,20),11)
+    self.imm_s = se(self.bits(31,25,5)|self.bits(11,7),11)
+    self.imm_b = se(self.bits(31,31,12)|self.bits(7,7,11)|self.bits(30,25,5)|self.bits(11,8,1),12)
+    self.imm_u = self.bits(31,12,12)
+    self.imm_j = se(self.bits(31,31,20)|self.bits(19,12,12)|self.bits(20,20,11)|self.bits(30,21,1),20)
     try:
-        self.ops = Ops(self.bits(6,0))
+        Ops(self.ops)
     except:
-        print('Write opcode {0:06b}'.format(self.bits(6,0)))
         dump()
+        print('Invalid opcode {:06b}'.format(self.ops))
         exit(0)
-    print('ins: %08x rd: %3s opcode: %r' % (self.ins, rname[self.rd()], self.ops))
+    print('ins: %08x rd: %3s opcode: %r' % (self.ins, rname[self.rd()], Ops(self.ops)))
 
   def execute(self):
     rd = self.rd()
-    if self.ops == Ops.JAL:
-        reg['pc'] += self.imm_r
+    rs1 = self.rs1()
+    if Ops(self.ops) == Ops.JAL:
+        reg['pc'] += self.imm_j
         reg[rname[rd]] = reg['pc'] + 4
-    elif self.ops == Ops.IMM:
-        if self.funct3() == Funct3.ADDI:
-            reg[rname[rd]] = self.imm_i
+    elif Ops(self.ops) == Ops.IMM:
+        if Funct3(self.funct3()) == Funct3.ADDI:
+            reg[rname[rd]] = self.imm_i & ~reg[rname[rs1]]
             reg['pc'] += 4
         else:
-            dump()
-            raise Exception('Write %r' % self.funct3())
-    elif self.ops == Ops.SYS:
+            panic('Write {} Funct3: {:03b}'.format(self.ops, self.funct3()))
+    elif Ops(self.ops) == Ops.SYS:
+        if Funct3(self.funct3()) == Funct3.CSRRS:
+            if rs1 != rname.index('x0'):
+                reg[rname[rd]] = self.imm_i
+        else:
+            panic('Write {} Funct3: {:03b}'.format(self.ops, self.funct3()))
         reg['pc'] += 4
     else:
-        dump()
-        raise Exception('Write %r' % self.ops)
-    pass
+        panic('Write {%r}' % self.ops)
     
   def step(self):
     self.fetch()
