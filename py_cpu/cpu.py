@@ -40,6 +40,8 @@ class Rom:
 
 class Ops(Enum):
   INVALID = 0b0
+  LUI = 0b0110111
+  AUIPC = 0b0010111
   JAL = 0b1101111
   BRANCH = 0b1100011
   IMM = 0b0010011
@@ -98,7 +100,12 @@ class CPU:
     self.imm_j = 0
 
   def funct3(self):
-    return self.bits(14,12)
+    try:
+        return Funct3(self.bits(14,12))
+    except:
+        dump()
+        print('{:03b} not implemented'.format(self.bits(14,12)))
+        exit(0)
 
   def bits(self, s, e, lshift = 0):
     return ((self.ins >> e) & ((1 << (s - e + 1)) - 1)) << lshift
@@ -116,58 +123,64 @@ class CPU:
     self.ins = rom[reg['pc']]
 
   def decode(self):
-    self.ops = self.bits(6,0)
+    try:
+        self.ops = Ops(self.bits(6,0))
+    except:
+        dump()
+        print('Invalid opcode {:07b}'.format(self.bits(6,0)))
+        exit(0)
     self.imm_i = se(self.bits(31,20),11)
     self.imm_s = se(self.bits(31,25,5)|self.bits(11,7),11)
     self.imm_b = se(self.bits(31,31,12)|self.bits(7,7,11)|self.bits(30,25,5)|self.bits(11,8,1),11)
     self.imm_u = self.bits(31,12,12)
     self.imm_j = se(self.bits(31,31,20)|self.bits(19,12,12)|self.bits(20,20,11)|self.bits(30,21,1),19)
-    try:
-        Ops(self.ops)
-    except:
-        dump()
-        print('Invalid opcode {:07b}'.format(self.ops))
-        exit(0)
-    print('ins: %08x rd: %3s opcode: %r' % (self.ins, rname[self.rd()], Ops(self.ops)))
+    print('ins: %08x rd: %3s opcode: %r' % (self.ins, rname[self.rd()], self.ops))
 
   def execute(self):
     rd = self.rd()
     rs1 = self.rs1()
     rs2 = self.rs2()
-    if Ops(self.ops) == Ops.JAL:
+    if self.ops == Ops.JAL:
         reg['pc'] += self.imm_j
         if rd != 0:
             reg[rname[rd]] = reg['pc'] + 4
-    elif Ops(self.ops) == Ops.IMM:
-        if Funct3(self.funct3()) == Funct3.ADDI:
-            reg[rname[rd]] = self.imm_i & ~reg[rname[rs1]]
+    elif self.ops == Ops.IMM:
+        if self.funct3() == Funct3.ADDI:
+            reg[rname[rd]] = self.imm_i
             reg['pc'] += 4
         else:
-            panic('Write {} Funct3: {:03b}'.format(self.ops, self.funct3()))
-    elif Ops(self.ops) == Ops.SYS:
-        if Funct3(self.funct3()) == Funct3.CSRRS:
-            if rs1 != rname.index('x0'):
-                reg[rname[rd]] = self.imm_i
-        else:
-            panic('Write {} Funct3: {:03b}'.format(self.ops, self.funct3()))
+            panic('Write {!r} Funct3: {!r}'.format(self.ops, self.funct3()))
+    elif self.ops == Ops.AUIPC:
+        reg[rname[rd]] = self.imm_u + reg['pc']
         reg['pc'] += 4
-    elif Ops(self.ops) == Ops.BRANCH:
+    elif self.ops == Ops.SYS:
+        if self.funct3() == Funct3.ECALL:
+            if reg['gp'] > 1:
+                panic('Test %i failed' % reg['gp'])
+        else:
+            # CSR not implemented
+            pass
+        reg['pc'] += 4
+    elif self.ops == Ops.BRANCH:
         Branch = False
-        if Funct3(self.funct3()) == Funct3.BNE:
+        if self.funct3() == Funct3.BNE:
             if reg[rname[rs1]] != reg[rname[rs2]]:
                 Branch = True
-        elif Funct3(self.funct3()) == Funct3.BEQ:
+        elif self.funct3() == Funct3.BEQ:
             if reg[rname[rs1]] == reg[rname[rs2]]:
                 Branch = True
         else:
-            panic('Branch {:03b} not implemented'.format(self.funct3))
+            panic('Branch {!r} not implemented'.format(self.funct3))
 
         if Branch:
             reg['pc'] += self.imm_b
         else:
             reg['pc'] += 4
+    elif self.ops == Ops.LUI:
+        reg[rname[rd]] = self.imm_u
+        reg['pc'] += 4
     else:
-        panic('Write opcode {:07b}'.format(self.ops))
+        panic('Write opcode %r' % self.ops)
     
   def step(self):
     self.fetch()
