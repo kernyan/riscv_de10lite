@@ -41,12 +41,16 @@ class Rom:
 class Ops(Enum):
   INVALID = 0b0
   JAL = 0b1101111
-  IMM = ADDI = SLTI = SLTIU = XORI = ORI = ANDI = SLLI = SRLI = SRAI = 0b0010011
+  BRANCH = 0b1100011
+  IMM = 0b0010011
 
   # systems
   SYS = 0b1110011
+  
 
 class Funct3(Enum):
+
+  # Ops.IMM
   ADDI = 0b000
   SLLI = 0b001
   SLTI = 0b010
@@ -55,6 +59,14 @@ class Funct3(Enum):
   SRLI = SRAI = 0b101
   ORI = 0b110
   ANDI = 0b111
+
+  # Ops.BRANCH
+  BEQ = 0b000
+  BNE = 0b001
+  BLT = 0b100
+  BGE = 0b101
+  BLTU = 0b110
+  BGEU = 0b111
 
   # Ops.SYS redefition of Funct3 bits
   ECALL = 0b000
@@ -107,23 +119,25 @@ class CPU:
     self.ops = self.bits(6,0)
     self.imm_i = se(self.bits(31,20),11)
     self.imm_s = se(self.bits(31,25,5)|self.bits(11,7),11)
-    self.imm_b = se(self.bits(31,31,12)|self.bits(7,7,11)|self.bits(30,25,5)|self.bits(11,8,1),12)
+    self.imm_b = se(self.bits(31,31,12)|self.bits(7,7,11)|self.bits(30,25,5)|self.bits(11,8,1),11)
     self.imm_u = self.bits(31,12,12)
-    self.imm_j = se(self.bits(31,31,20)|self.bits(19,12,12)|self.bits(20,20,11)|self.bits(30,21,1),20)
+    self.imm_j = se(self.bits(31,31,20)|self.bits(19,12,12)|self.bits(20,20,11)|self.bits(30,21,1),19)
     try:
         Ops(self.ops)
     except:
         dump()
-        print('Invalid opcode {:06b}'.format(self.ops))
+        print('Invalid opcode {:07b}'.format(self.ops))
         exit(0)
     print('ins: %08x rd: %3s opcode: %r' % (self.ins, rname[self.rd()], Ops(self.ops)))
 
   def execute(self):
     rd = self.rd()
     rs1 = self.rs1()
+    rs2 = self.rs2()
     if Ops(self.ops) == Ops.JAL:
         reg['pc'] += self.imm_j
-        reg[rname[rd]] = reg['pc'] + 4
+        if rd != 0:
+            reg[rname[rd]] = reg['pc'] + 4
     elif Ops(self.ops) == Ops.IMM:
         if Funct3(self.funct3()) == Funct3.ADDI:
             reg[rname[rd]] = self.imm_i & ~reg[rname[rs1]]
@@ -137,8 +151,23 @@ class CPU:
         else:
             panic('Write {} Funct3: {:03b}'.format(self.ops, self.funct3()))
         reg['pc'] += 4
+    elif Ops(self.ops) == Ops.BRANCH:
+        Branch = False
+        if Funct3(self.funct3()) == Funct3.BNE:
+            if reg[rname[rs1]] != reg[rname[rs2]]:
+                Branch = True
+        elif Funct3(self.funct3()) == Funct3.BEQ:
+            if reg[rname[rs1]] == reg[rname[rs2]]:
+                Branch = True
+        else:
+            panic('Branch {:03b} not implemented'.format(self.funct3))
+
+        if Branch:
+            reg['pc'] += self.imm_b
+        else:
+            reg['pc'] += 4
     else:
-        panic('Write {%r}' % self.ops)
+        panic('Write opcode {:07b}'.format(self.ops))
     
   def step(self):
     self.fetch()
