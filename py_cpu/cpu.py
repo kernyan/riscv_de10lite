@@ -48,6 +48,7 @@ class Ops(Enum):
 
   # systems
   SYS = 0b1110011
+  FENCE = 0b0001111
   
 
 class Funct3(Enum):
@@ -148,6 +149,9 @@ class CPU:
         if self.funct3() == Funct3.ADDI:
             reg[rname[rd]] = self.imm_i
             reg['pc'] += 4
+        elif self.funct3() == Funct3.SLLI:
+            reg[rname[rd]] = (reg[rname[rs1]] << self.bits(24,20))
+            reg['pc'] += 4
         else:
             panic('Write {!r} Funct3: {!r}'.format(self.ops, self.funct3()))
     elif self.ops == Ops.AUIPC:
@@ -169,8 +173,11 @@ class CPU:
         elif self.funct3() == Funct3.BEQ:
             if reg[rname[rs1]] == reg[rname[rs2]]:
                 Branch = True
+        elif self.funct3() == Funct3.BLT:
+            if reg[rname[rs1]] < reg[rname[rs2]]:
+                Branch = True
         else:
-            panic('Branch {!r} not implemented'.format(self.funct3))
+            panic('Branch {!r} not implemented'.format(self.funct3()))
 
         if Branch:
             reg['pc'] += self.imm_b
@@ -178,6 +185,9 @@ class CPU:
             reg['pc'] += 4
     elif self.ops == Ops.LUI:
         reg[rname[rd]] = self.imm_u
+        reg['pc'] += 4
+    elif self.ops == Ops.FENCE:
+        # ignore as no memory reordering in emulation
         reg['pc'] += 4
     else:
         panic('Write opcode %r' % self.ops)
