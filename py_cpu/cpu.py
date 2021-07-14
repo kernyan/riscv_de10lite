@@ -261,7 +261,7 @@ def dump():
   out = []
   for i in range(len(reg)):
     out += '%3s: %08x ' % (rname[i], reg[rname[i]])
-    if (i + 1) % 4 == 0:
+    if (i + 1) % 8 == 0:
       out += '\n'
   print(''.join(out))
   print('Instruction: {0:032b}'.format(cpu.ins))
