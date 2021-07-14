@@ -10,6 +10,17 @@ rname = ['x0', 'ra', 'sp', 'gp', 'tp'] + ['t%s' % i for i in [0,1,2]] \
   + ['s0', 's1'] + ['a%s' % i for i in range(8)] + ['s%s' % i for i in range(2, 12)] \
   + ['t%s' % i for i in [3,4,5,6]] + ['pc']
 
+RAM = b'\x00' * 0x3000
+
+def load(addr):
+    addr -= ENTRY
+    return struct.unpack("<I", RAM[addr:addr+4])[0]
+
+def store(addr, val):
+    global RAM
+    addr -= ENTRY
+    RAM = RAM[:addr] + val + RAM[addr+len(val):]
+
 class Reg:
     def __init__(self):
         self.reg = [0]*33
@@ -45,6 +56,8 @@ class Ops(Enum):
   JAL = 0b1101111
   BRANCH = 0b1100011
   IMM = 0b0010011
+  LOAD = 0b0000011
+  STORE = 0b0100011
 
   # systems
   SYS = 0b1110011
@@ -70,6 +83,18 @@ class Funct3(Enum):
   BGE = 0b101
   BLTU = 0b110
   BGEU = 0b111
+
+  # Ops.LOAD
+  LB = 0b000 # byte
+  LH = 0b001 # 2 byte
+  LW = 0b010 # 4 byte
+  LBU = 0b100
+  LHU = 0b101
+
+  # Ops.STORE
+  SB = 0b000
+  SH = 0b001
+  SW = 0b010
 
   # Ops.SYS redefition of Funct3 bits
   ECALL = 0b000
@@ -147,7 +172,7 @@ class CPU:
             reg[rname[rd]] = reg['pc'] + 4
     elif self.ops == Ops.IMM:
         if self.funct3() == Funct3.ADDI:
-            reg[rname[rd]] = self.imm_i
+            reg[rname[rd]] = (reg[rname[rs1]] + self.imm_i) & 0xFFFFFFFF
             reg['pc'] += 4
         elif self.funct3() == Funct3.SLLI:
             reg[rname[rd]] = (reg[rname[rs1]] << self.bits(24,20))
@@ -157,6 +182,36 @@ class CPU:
     elif self.ops == Ops.AUIPC:
         reg[rname[rd]] = self.imm_u + reg['pc']
         reg['pc'] += 4
+    elif self.ops == Ops.LOAD:
+        if self.funct3() == Funct3.LH:
+            reg[rname[rd]] = se(load(reg[rname[rs1]] + self.imm_i) & 0xFFFF, 15)
+            reg['pc'] += 4
+        elif self.funct3() == Funct3.LB:
+            reg[rname[rd]] = se(load(reg[rname[rs1]] + self.imm_i) & 0xFF, 7)
+            reg['pc'] += 4
+        elif self.funct3() == Funct3.LW:
+            reg[rname[rd]] = load(reg[rname[rs1]] + self.imm_i)
+            reg['pc'] += 4
+        elif self.funct3() == Funct3.LHU:
+            reg[rname[rd]] = load(reg[rname[rs1]] + self.imm_i) & 0xFFFF
+            reg['pc'] += 4
+        elif self.funct3() == Funct3.LBU:
+            reg[rname[rd]] = load(reg[rname[rs1]] + self.imm_i) & 0xFF
+            reg['pc'] += 4
+        else:
+            panic('%r %r unimplemented' % (self.ops, self.funct3()))
+    elif self.ops == Ops.STORE:
+        if self.funct3() == Funct3.SH:
+            store(reg[rname[rs1]] + self.imm_s, struct.pack('H', reg[rname[rs2]] & 0xFFFF))
+            reg['pc'] += 4
+        elif self.funct3() == Funct3.SB:
+            store(reg[rname[rs1]] + self.imm_s, struct.pack('B', reg[rname[rs2]] & 0xFF))
+            reg['pc'] += 4
+        elif self.funct3() == Funct3.SW:
+            store(reg[rname[rs1]] + self.imm_s, struct.pack('I', reg[rname[rs2]]))
+            reg['pc'] += 4
+        else:
+            panic('%r %r unimplemented' % (self.ops, self.funct3()))
     elif self.ops == Ops.SYS:
         if self.funct3() == Funct3.ECALL:
             if reg['gp'] > 1:
