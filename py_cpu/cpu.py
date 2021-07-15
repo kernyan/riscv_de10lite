@@ -6,6 +6,7 @@ import struct
 from enum import Enum
 
 ENTRY = 0
+MOFF = 0
 rname = ['x0', 'ra', 'sp', 'gp', 'tp'] + ['t%s' % i for i in [0,1,2]] \
   + ['s0', 's1'] + ['a%s' % i for i in range(8)] + ['s%s' % i for i in range(2, 12)] \
   + ['t%s' % i for i in [3,4,5,6]] + ['pc']
@@ -13,12 +14,12 @@ rname = ['x0', 'ra', 'sp', 'gp', 'tp'] + ['t%s' % i for i in [0,1,2]] \
 RAM = b'\x00' * 0x3000
 
 def load(addr):
-    addr -= ENTRY
+    addr -= MOFF
     return struct.unpack("<I", RAM[addr:addr+4])[0]
 
 def store(addr, val):
     global RAM
-    addr -= ENTRY
+    addr -= MOFF
     RAM = RAM[:addr] + val + RAM[addr+len(val):]
 
 class Reg:
@@ -183,20 +184,21 @@ class CPU:
         reg[rname[rd]] = self.imm_u + reg['pc']
         reg['pc'] += 4
     elif self.ops == Ops.LOAD:
+        src = (reg[rname[rs1]] + self.imm_i) & 0xFFFFFFFF
         if self.funct3() == Funct3.LH:
-            reg[rname[rd]] = se(load(reg[rname[rs1]] + self.imm_i) & 0xFFFF, 15)
+            reg[rname[rd]] = se(load(src) & 0xFFFF, 15)
             reg['pc'] += 4
         elif self.funct3() == Funct3.LB:
-            reg[rname[rd]] = se(load(reg[rname[rs1]] + self.imm_i) & 0xFF, 7)
+            reg[rname[rd]] = se(load(src) & 0xFF, 7)
             reg['pc'] += 4
         elif self.funct3() == Funct3.LW:
-            reg[rname[rd]] = load(reg[rname[rs1]] + self.imm_i)
+            reg[rname[rd]] = load(src)
             reg['pc'] += 4
         elif self.funct3() == Funct3.LHU:
-            reg[rname[rd]] = load(reg[rname[rs1]] + self.imm_i) & 0xFFFF
+            reg[rname[rd]] = load(src) & 0xFFFF
             reg['pc'] += 4
         elif self.funct3() == Funct3.LBU:
-            reg[rname[rd]] = load(reg[rname[rs1]] + self.imm_i) & 0xFF
+            reg[rname[rd]] = load(src) & 0xFF
             reg['pc'] += 4
         else:
             panic('%r %r unimplemented' % (self.ops, self.funct3()))
@@ -216,6 +218,8 @@ class CPU:
         if self.funct3() == Funct3.ECALL:
             if reg['gp'] > 1:
                 panic('Test %i failed' % reg['gp'])
+            else:
+                print('Pass %i' % reg['gp'])
         else:
             # CSR not implemented
             pass
@@ -264,7 +268,10 @@ def dump():
     if (i + 1) % 8 == 0:
       out += '\n'
   print(''.join(out))
-  print('Instruction: {0:032b}'.format(cpu.ins))
+  print('Test %i failed' % (reg['gp'] >> 1))
+  #print('Instruction: {0:032b}'.format(cpu.ins))
+
+
  
 if __name__ == '__main__':
   for i in glob.glob('../../riscv-tests/isa/rv32ui-p-*'):
@@ -272,9 +279,16 @@ if __name__ == '__main__':
       continue
     print("File %s" % i)
     EFile=ELFFile(open(i,'rb'))
+
     dat = EFile.get_section_by_name('.text.init').data()
     for i in range(len(dat)//4):
       rom[i] = struct.unpack('<I', dat[i*4:i*4+4])[0]
+
+    mdat = EFile.get_section_by_name('.data').data()
+    MOFF = EFile.get_section_by_name('.data').header.sh_addr
+    for i in range(len(mdat)//4):
+      store(i*4+MOFF, mdat[i*4:i*4+4])
+
     ENTRY = reg['pc'] = int(EFile.header['e_entry'])
 
     while cpu.step():
