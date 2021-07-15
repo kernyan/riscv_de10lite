@@ -4,6 +4,7 @@ import glob
 from elftools.elf.elffile import ELFFile
 import struct
 from enum import Enum
+import pdb
 
 ENTRY = 0
 MOFF = 0
@@ -12,6 +13,10 @@ rname = ['x0', 'ra', 'sp', 'gp', 'tp'] + ['t%s' % i for i in [0,1,2]] \
   + ['t%s' % i for i in [3,4,5,6]] + ['pc']
 
 RAM = b'\x00' * 0x3000
+
+def Debug():
+    if reg['pc'] == 0x80000218:
+      pdb.set_trace()
 
 def load(addr):
     addr -= MOFF
@@ -203,14 +208,15 @@ class CPU:
         else:
             panic('%r %r unimplemented' % (self.ops, self.funct3()))
     elif self.ops == Ops.STORE:
+        src = (reg[rname[rs1]] + self.imm_s) & 0xFFFFFFFF
         if self.funct3() == Funct3.SH:
-            store(reg[rname[rs1]] + self.imm_s, struct.pack('H', reg[rname[rs2]] & 0xFFFF))
+            store(src, struct.pack('H', reg[rname[rs2]] & 0xFFFF))
             reg['pc'] += 4
         elif self.funct3() == Funct3.SB:
-            store(reg[rname[rs1]] + self.imm_s, struct.pack('B', reg[rname[rs2]] & 0xFF))
+            store(src, struct.pack('B', reg[rname[rs2]] & 0xFF))
             reg['pc'] += 4
         elif self.funct3() == Funct3.SW:
-            store(reg[rname[rs1]] + self.imm_s, struct.pack('I', reg[rname[rs2]]))
+            store(src, struct.pack('I', reg[rname[rs2]]))
             reg['pc'] += 4
         else:
             panic('%r %r unimplemented' % (self.ops, self.funct3()))
