@@ -6,6 +6,12 @@ import struct
 from enum import Enum
 import pdb
 
+DEBUG = True
+
+def printd(str):
+    if DEBUG:
+        print(str)
+
 ENTRY = 0
 MOFF = 0
 rname = ['x0', 'ra', 'sp', 'gp', 'tp'] + ['t%s' % i for i in [0,1,2]] \
@@ -15,7 +21,7 @@ rname = ['x0', 'ra', 'sp', 'gp', 'tp'] + ['t%s' % i for i in [0,1,2]] \
 RAM = b'\x00' * 0x3000
 
 def Debug():
-    if reg['pc'] == 0x80000218:
+    if reg['pc'] == 0x80000338:
       pdb.set_trace()
 
 def load(addr):
@@ -49,7 +55,7 @@ class Rom:
 
   def __getitem__(self, key):
     if OffSet(key) > len(self.dat) or OffSet(key) < 0:
-      raise Exception("Address out of range %08x" % key)
+      panic("Address out of range %08x" % key)
     return self.dat[OffSet(key)]
 
   def __setitem__(self, key, value):
@@ -124,7 +130,6 @@ class CPU:
   def __init__(self):
     self.ins = 0
     self.ops = Ops(0)
-    self.cont = True
     self.imm_i = 0
     self.imm_s = 0
     self.imm_b = 0
@@ -163,10 +168,10 @@ class CPU:
         exit(0)
     self.imm_i = se(self.bits(31,20),11)
     self.imm_s = se(self.bits(31,25,5)|self.bits(11,7),11)
-    self.imm_b = se(self.bits(31,31,12)|self.bits(7,7,11)|self.bits(30,25,5)|self.bits(11,8,1),11)
+    self.imm_b = se(self.bits(31,31,12)|self.bits(7,7,11)|self.bits(30,25,5)|self.bits(11,8,1),12)
     self.imm_u = self.bits(31,12,12)
     self.imm_j = se(self.bits(31,31,20)|self.bits(19,12,12)|self.bits(20,20,11)|self.bits(30,21,1),19)
-    print('ins: %08x rd: %3s opcode: %r' % (self.ins, rname[self.rd()], self.ops))
+    printd('add: %08x ins: %08x rd: %3s opcode: %r' % (reg['pc'], self.ins, rname[self.rd()], self.ops))
 
   def execute(self):
     rd = self.rd()
@@ -186,7 +191,7 @@ class CPU:
         else:
             panic('Write {!r} Funct3: {!r}'.format(self.ops, self.funct3()))
     elif self.ops == Ops.AUIPC:
-        reg[rname[rd]] = self.imm_u + reg['pc']
+        reg[rname[rd]] = (self.imm_u + reg['pc']) & 0xFFFFFFFF
         reg['pc'] += 4
     elif self.ops == Ops.LOAD:
         src = (reg[rname[rs1]] + self.imm_i) & 0xFFFFFFFF
@@ -224,8 +229,8 @@ class CPU:
         if self.funct3() == Funct3.ECALL:
             if reg['gp'] > 1:
                 panic('Test %i failed' % reg['gp'])
-            else:
-                print('Pass %i' % reg['gp'])
+        elif self.funct3() == Funct3.CSRRW and self.imm_i == (1<<32)-1024: # hack to match inst c0001073
+            return False # test succeed
         else:
             # CSR not implemented
             pass
@@ -245,7 +250,8 @@ class CPU:
             panic('Branch {!r} not implemented'.format(self.funct3()))
 
         if Branch:
-            reg['pc'] += self.imm_b
+            Debug()
+            reg['pc'] = (reg['pc'] + self.imm_b) & 0xFFFFFFFF
         else:
             reg['pc'] += 4
     elif self.ops == Ops.LUI:
@@ -256,12 +262,12 @@ class CPU:
         reg['pc'] += 4
     else:
         panic('Write opcode %r' % self.ops)
+    return True
     
   def step(self):
     self.fetch()
     self.decode()
-    self.execute()
-    return self.cont
+    return self.execute()
 
 rom = Rom()
 cpu = CPU()
@@ -274,11 +280,8 @@ def dump():
     if (i + 1) % 8 == 0:
       out += '\n'
   print(''.join(out))
-  print('Test %i failed' % (reg['gp'] >> 1))
-  #print('Instruction: {0:032b}'.format(cpu.ins))
+  print('Instruction: {0:032b}'.format(cpu.ins))
 
-
- 
 if __name__ == '__main__':
   for i in glob.glob('../../riscv-tests/isa/rv32ui-p-*'):
     if i.endswith('.dump'):
@@ -290,14 +293,15 @@ if __name__ == '__main__':
     for i in range(len(dat)//4):
       rom[i] = struct.unpack('<I', dat[i*4:i*4+4])[0]
 
-    mdat = EFile.get_section_by_name('.data').data()
-    MOFF = EFile.get_section_by_name('.data').header.sh_addr
-    for i in range(len(mdat)//4):
-      store(i*4+MOFF, mdat[i*4:i*4+4])
+    if EFile.get_section_by_name('.data'):
+        mdat = EFile.get_section_by_name('.data').data()
+        MOFF = EFile.get_section_by_name('.data').header.sh_addr
+        for i in range(len(mdat)//4):
+          store(i*4+MOFF, mdat[i*4:i*4+4])
 
     ENTRY = reg['pc'] = int(EFile.header['e_entry'])
 
     while cpu.step():
       pass
 
-    exit(0)  # only process 1st file for now
+    #exit(0)  # only process 1st file for now
