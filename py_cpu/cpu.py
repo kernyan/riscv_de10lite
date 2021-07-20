@@ -6,7 +6,7 @@ import struct
 from enum import Enum
 import pdb
 
-DEBUG = True
+DEBUG = False
 
 def printd(str):
     if DEBUG:
@@ -21,8 +21,8 @@ rname = ['x0', 'ra', 'sp', 'gp', 'tp'] + ['t%s' % i for i in [0,1,2]] \
 RAM = b'\x00' * 0x3000
 
 def Debug():
-    if reg['pc'] == 0x80000338:
-      pdb.set_trace()
+    #if reg['pc'] == 0x800001b8:
+    pdb.set_trace()
 
 def load(addr):
     addr -= MOFF
@@ -62,44 +62,53 @@ class Rom:
     self.dat[key] = value
 
 class Ops(Enum):
-  INVALID = 0b0
-  LUI = 0b0110111
-  AUIPC = 0b0010111
-  JAL = 0b1101111
-  BRANCH = 0b1100011
-  IMM = 0b0010011
-  LOAD = 0b0000011
-  STORE = 0b0100011
-
-  # systems
-  SYS = 0b1110011
-  FENCE = 0b0001111
-  
+  INVALID  = 0b0
+  LOAD     = 0b0000011
+  STORE    = 0b0100011
+  OP_IMM   = 0b0010011
+  OP       = 0b0110011
+  AUIPC    = 0b0010111
+  LUI      = 0b0110111
+  BRANCH   = 0b1100011
+  JALR     = 0b1100111
+  JAL      = 0b1101111
+  SYSTEM   = 0b1110011
+  MISC_MEM = 0b0001111
 
 class Funct3(Enum):
 
-  # Ops.IMM
-  ADDI = 0b000
-  SLLI = 0b001
-  SLTI = 0b010
+  # Ops.OP_IMM
+  ADDI  = 0b000
+  SLLI  = 0b001
+  SLTI  = 0b010
   SLTIU = 0b011
-  XORI = 0b100
-  SRLI = SRAI = 0b101
-  ORI = 0b110
-  ANDI = 0b111
+  XORI  = 0b100
+  SRLI  = SRAI = 0b101
+  ORI   = 0b110
+  ANDI  = 0b111
+
+  # Ops.OP
+  ADD  = SUB = 0b000
+  SLL  = 0b001
+  SLT  = 0b010
+  SLTU = 0b011
+  XOR  = 0b100
+  SRL  = SRA = 0b101
+  OR   = 0b110
+  AND  = 0b111
 
   # Ops.BRANCH
-  BEQ = 0b000
-  BNE = 0b001
-  BLT = 0b100
-  BGE = 0b101
+  BEQ  = 0b000
+  BNE  = 0b001
+  BLT  = 0b100
+  BGE  = 0b101
   BLTU = 0b110
   BGEU = 0b111
 
   # Ops.LOAD
-  LB = 0b000 # byte
-  LH = 0b001 # 2 byte
-  LW = 0b010 # 4 byte
+  LB  = 0b000 # byte
+  LH  = 0b001 # 2 byte
+  LW  = 0b010 # 4 byte
   LBU = 0b100
   LHU = 0b101
 
@@ -108,11 +117,11 @@ class Funct3(Enum):
   SH = 0b001
   SW = 0b010
 
-  # Ops.SYS redefition of Funct3 bits
-  ECALL = 0b000
-  CSRRW = 0b001
-  CSRRS = 0b010
-  CSRRC = 0b011
+  # Ops.SYSTEM redefition of Funct3 bits
+  ECALL  = 0b000
+  CSRRW  = 0b001
+  CSRRS  = 0b010
+  CSRRC  = 0b011
   CSRRWI = 0b101
   CSRRSI = 0b110
   CSRRCI = 0b111
@@ -181,12 +190,22 @@ class CPU:
         reg['pc'] += self.imm_j
         if rd != 0:
             reg[rname[rd]] = reg['pc'] + 4
-    elif self.ops == Ops.IMM:
+    elif self.ops == Ops.OP_IMM:
         if self.funct3() == Funct3.ADDI:
-            reg[rname[rd]] = (reg[rname[rs1]] + self.imm_i) & 0xFFFFFFFF
-            reg['pc'] += 4
+            if self.imm_i == 0 and rname[rd] == 'x0' and rname[rs1] == 'x0':
+                reg['pc'] += 4
+            else:
+                reg[rname[rd]] = (reg[rname[rs1]] + self.imm_i) & 0xFFFFFFFF
+                reg['pc'] += 4
         elif self.funct3() == Funct3.SLLI:
             reg[rname[rd]] = (reg[rname[rs1]] << self.bits(24,20))
+            reg['pc'] += 4
+        elif self.funct3() == Funct3.SRAI:
+            if self.bits(30,30): # SRAI
+                #Debug()
+                reg[rname[rd]] = (reg[rname[rs1]] >> self.bits(24,20)) | (reg[rname[rs1]] & 0x80000000)
+            else: #SRLI
+                reg[rname[rd]] = (reg[rname[rs1]] >> self.bits(24,20))
             reg['pc'] += 4
         else:
             panic('Write {!r} Funct3: {!r}'.format(self.ops, self.funct3()))
@@ -225,7 +244,7 @@ class CPU:
             reg['pc'] += 4
         else:
             panic('%r %r unimplemented' % (self.ops, self.funct3()))
-    elif self.ops == Ops.SYS:
+    elif self.ops == Ops.SYSTEM:
         if self.funct3() == Funct3.ECALL:
             if reg['gp'] > 1:
                 panic('Test %i failed' % reg['gp'])
@@ -250,16 +269,20 @@ class CPU:
             panic('Branch {!r} not implemented'.format(self.funct3()))
 
         if Branch:
-            Debug()
             reg['pc'] = (reg['pc'] + self.imm_b) & 0xFFFFFFFF
         else:
             reg['pc'] += 4
     elif self.ops == Ops.LUI:
         reg[rname[rd]] = self.imm_u
         reg['pc'] += 4
-    elif self.ops == Ops.FENCE:
+    elif self.ops == Ops.MISC_MEM:
         # ignore as no memory reordering in emulation
         reg['pc'] += 4
+    elif self.ops == Ops.OP:
+        if self.funct3() == Funct3.XOR:
+            if rname[rd] != 'x0': # not specified in spec?
+                reg[rname[rd]] = reg[rname[rs1]] ^ reg[rname[rs2]]
+            reg['pc'] += 4
     else:
         panic('Write opcode %r' % self.ops)
     return True
