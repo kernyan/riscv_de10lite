@@ -21,7 +21,7 @@ rname = ['x0', 'ra', 'sp', 'gp', 'tp'] + ['t%s' % i for i in [0,1,2]] \
 RAM = b'\x00' * 0x3000
 
 def Debug():
-    if reg['pc'] == 0x8000018c:
+    if reg['pc'] == 0x80000180:
         pdb.set_trace()
 
 def load(addr):
@@ -187,9 +187,10 @@ class CPU:
     rs1 = self.rs1()
     rs2 = self.rs2()
     if self.ops == Ops.JAL:
+        cur = reg['pc']
         reg['pc'] += self.imm_j
         if rd != 0:
-            reg[rname[rd]] = reg['pc'] + 4
+            reg[rname[rd]] = cur + 4
     elif self.ops == Ops.OP_IMM:
         if self.funct3() == Funct3.ADDI:
             if self.imm_i == 0 and rname[rd] == 'x0' and rname[rs1] == 'x0':
