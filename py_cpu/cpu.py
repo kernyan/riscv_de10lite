@@ -21,7 +21,7 @@ rname = ['x0', 'ra', 'sp', 'gp', 'tp'] + ['t%s' % i for i in [0,1,2]] \
 RAM = b'\x00' * 0x3000
 
 def Debug():
-    if reg['pc'] == 0x80000180:
+    if reg['pc'] == 0x80000188:
         pdb.set_trace()
 
 def load(addr):
@@ -286,6 +286,14 @@ class CPU:
             if rname[rd] != 'x0': # not specified in spec?
                 reg[rname[rd]] = reg[rname[rs1]] ^ reg[rname[rs2]]
             reg['pc'] += 4
+        elif self.funct3() == Funct3.ADD:
+            if self.ins >> 30: # SUB
+                reg[rname[rd]] = (reg[rname[rs1]] - reg[rname[rs2]]) & 0xFFFFFFFF
+            else: # ADD
+                reg[rname[rd]] = (reg[rname[rs1]] + reg[rname[rs2]]) & 0xFFFFFFFF
+            reg['pc'] += 4
+        else:
+            panic('Write funct3 %r' % self.funct3())
     else:
         panic('Write opcode %r' % self.ops)
     return True
