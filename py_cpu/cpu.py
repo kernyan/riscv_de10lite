@@ -21,7 +21,7 @@ rname = ['x0', 'ra', 'sp', 'gp', 'tp'] + ['t%s' % i for i in [0,1,2]] \
 RAM = b'\x00' * 0x3000
 
 def Debug():
-    if reg['pc'] == 0x80000188:
+    if reg['pc'] == 0x800006bc:
         pdb.set_trace()
 
 def load(addr):
@@ -41,6 +41,8 @@ class Reg:
         return self.reg[rname.index(key)]
 
     def __setitem__(self, key, value):
+        if key == 'x0':
+            return
         self.reg[rname.index(key)] = value
 
     def __len__(self):
@@ -194,10 +196,12 @@ class CPU:
     elif self.ops == Ops.OP_IMM:
         if self.funct3() == Funct3.ADDI:
             if self.imm_i == 0 and rname[rd] == 'x0' and rname[rs1] == 'x0':
-                reg['pc'] += 4
+                pass
+            elif rs1 == 0:
+                reg[rname[rd]] = self.imm_i
             else:
                 reg[rname[rd]] = (reg[rname[rs1]] + self.imm_i) & 0xFFFFFFFF
-                reg['pc'] += 4
+            reg['pc'] += 4
         elif self.funct3() == Funct3.SLLI:
             reg[rname[rd]] = (reg[rname[rs1]] << self.bits(24,20))
             reg['pc'] += 4
@@ -292,8 +296,11 @@ class CPU:
             else: # ADD
                 reg[rname[rd]] = (reg[rname[rs1]] + reg[rname[rs2]]) & 0xFFFFFFFF
             reg['pc'] += 4
+        elif self.funct3() == Funct3.SLL:
+            reg[rname[rd]] = (reg[rname[rs1]] << (reg[rname[rs2]] & 0x1F)) & 0xFFFFFFFF
+            reg['pc'] += 4
         else:
-            panic('Write funct3 %r' % self.funct3())
+            panic('Write Ops.OP %r' % self.funct3())
     else:
         panic('Write opcode %r' % self.ops)
     return True
