@@ -21,7 +21,7 @@ rname = ['x0', 'ra', 'sp', 'gp', 'tp'] + ['t%s' % i for i in [0,1,2]] \
 RAM = b'\x00' * 0x3000
 
 def Debug():
-    if reg['pc'] == 0x800006bc:
+    if reg['pc'] == 0x800001c8:
         pdb.set_trace()
 
 def load(addr):
@@ -205,6 +205,9 @@ class CPU:
         elif self.funct3() == Funct3.SLLI:
             reg[rname[rd]] = (reg[rname[rs1]] << self.bits(24,20))
             reg['pc'] += 4
+        elif self.funct3() == Funct3.SLTI:
+            reg[rname[rd]] = 1 if (Signed(reg[rname[rs1]]) < Signed(se(self.imm_i, 31))) else 0
+            reg['pc'] += 4
         elif self.funct3() == Funct3.SRAI:
             if self.bits(30,30): # SRAI
                 sb = reg[rname[rs1]] >> 31
@@ -313,6 +316,11 @@ class CPU:
 rom = Rom()
 cpu = CPU()
 reg = Reg()
+
+def Signed(val):
+    if val >> 31:
+        return -((1 << 32) - val)
+    return val
 
 def dump():
   out = []
