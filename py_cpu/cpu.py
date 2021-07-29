@@ -6,7 +6,7 @@ import struct
 from enum import Enum
 import pdb
 
-DEBUG = False
+DEBUG = True
 
 def printd(str):
     if DEBUG:
@@ -206,7 +206,7 @@ class CPU:
             reg[rname[rd]] = (reg[rname[rs1]] << self.bits(24,20))
             reg['pc'] += 4
         elif self.funct3() == Funct3.SLTI:
-            reg[rname[rd]] = 1 if (Signed(reg[rname[rs1]]) < Signed(se(self.imm_i, 31))) else 0
+            reg[rname[rd]] = 1 if (Signed(reg[rname[rs1]]) < Signed(self.imm_i)) else 0
             reg['pc'] += 4
         elif self.funct3() == Funct3.SRAI:
             if self.bits(30,30): # SRAI
@@ -216,6 +216,18 @@ class CPU:
                 reg[rname[rd]] = out
             else: #SRLI
                 reg[rname[rd]] = (reg[rname[rs1]] >> self.bits(24,20))
+            reg['pc'] += 4
+        elif self.funct3() == Funct3.ANDI:
+            reg[rname[rd]] = reg[rname[rs1]] & self.imm_i
+            reg['pc'] += 4
+        elif self.funct3() == Funct3.ORI:
+            reg[rname[rd]] = reg[rname[rs1]] | self.imm_i
+            reg['pc'] += 4
+        elif self.funct3() == Funct3.XORI:
+            if Signed(self.imm_i) == -1:
+                reg[rname[rd]] = ~reg[rname[rs1]]
+            else:
+                reg[rname[rd]] = reg[rname[rs1]] ^ self.imm_i
             reg['pc'] += 4
         else:
             panic('Write {!r} Funct3: {!r}'.format(self.ops, self.funct3()))
@@ -273,7 +285,16 @@ class CPU:
             if reg[rname[rs1]] == reg[rname[rs2]]:
                 Branch = True
         elif self.funct3() == Funct3.BLT:
+            if Signed(reg[rname[rs1]]) < Signed(reg[rname[rs2]]):
+                Branch = True
+        elif self.funct3() == Funct3.BLTU:
             if reg[rname[rs1]] < reg[rname[rs2]]:
+                Branch = True
+        elif self.funct3() == Funct3.BGE:
+            if Signed(reg[rname[rs1]]) >= Signed(reg[rname[rs2]]):
+                Branch = True
+        elif self.funct3() == Funct3.BGEU:
+            if reg[rname[rs1]] >= reg[rname[rs2]]:
                 Branch = True
         else:
             panic('Branch {!r} not implemented'.format(self.funct3()))
@@ -301,6 +322,24 @@ class CPU:
             reg['pc'] += 4
         elif self.funct3() == Funct3.SLL:
             reg[rname[rd]] = (reg[rname[rs1]] << (reg[rname[rs2]] & 0x1F)) & 0xFFFFFFFF
+            reg['pc'] += 4
+        elif self.funct3() == Funct3.AND:
+            reg[rname[rd]] = reg[rname[rs1]]& reg[rname[rs2]]
+            reg['pc'] += 4
+        elif self.funct3() == Funct3.XOR:
+            reg[rname[rd]] = reg[rname[rs1]] ^ reg[rname[rs2]]
+            reg['pc'] += 4
+        elif self.funct3() == Funct3.OR:
+            reg[rname[rd]] = reg[rname[rs1]] | reg[rname[rs2]]
+            reg['pc'] += 4
+        elif self.funct3() == Funct3.SLT:
+            reg[rname[rd]] = 1 if (Signed(reg[rname[rs1]]) < Signed(reg[rname[rs2]])) else 0
+            reg['pc'] += 4
+        elif self.funct3() == Funct3.SLTU:
+            if rname[rs1] == 'x0':
+                reg[rname[rd]] = 1 if reg[rname[rs2]] else 0
+            else:
+                reg[rname[rd]] = 1 if (reg[rname[rs1]] < reg[rname[rs2]]) else 0
             reg['pc'] += 4
         else:
             panic('Write Ops.OP %r' % self.funct3())
