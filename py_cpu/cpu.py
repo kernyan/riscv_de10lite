@@ -191,8 +191,11 @@ class CPU:
     if self.ops == Ops.JAL:
         cur = reg['pc']
         reg['pc'] += self.imm_j
-        if rd != 0:
-            reg[rname[rd]] = cur + 4
+        reg[rname[rd]] = cur + 4
+    elif self.ops == Ops.JALR:
+        cur = reg['pc']
+        reg['pc'] = (reg[rname[rs1]] + self.imm_i) & 0xFFFFFFFE
+        reg[rname[rd]] = cur + 4
     elif self.ops == Ops.OP_IMM:
         if self.funct3() == Funct3.ADDI:
             if self.imm_i == 0 and rname[rd] == 'x0' and rname[rs1] == 'x0':
@@ -203,10 +206,13 @@ class CPU:
                 reg[rname[rd]] = (reg[rname[rs1]] + self.imm_i) & 0xFFFFFFFF
             reg['pc'] += 4
         elif self.funct3() == Funct3.SLLI:
-            reg[rname[rd]] = (reg[rname[rs1]] << self.bits(24,20))
+            reg[rname[rd]] = (reg[rname[rs1]] << self.bits(24,20)) & 0xFFFFFFFF
             reg['pc'] += 4
         elif self.funct3() == Funct3.SLTI:
             reg[rname[rd]] = 1 if (Signed(reg[rname[rs1]]) < Signed(self.imm_i)) else 0
+            reg['pc'] += 4
+        elif self.funct3() == Funct3.SLTIU:
+            reg[rname[rd]] = 1 if (reg[rname[rs1]] < self.imm_i) else 0
             reg['pc'] += 4
         elif self.funct3() == Funct3.SRAI:
             if self.bits(30,30): # SRAI
@@ -323,8 +329,19 @@ class CPU:
         elif self.funct3() == Funct3.SLL:
             reg[rname[rd]] = (reg[rname[rs1]] << (reg[rname[rs2]] & 0x1F)) & 0xFFFFFFFF
             reg['pc'] += 4
+        elif self.funct3() == Funct3.SRL:
+            if self.bits(30,30): # SRA
+                pos = (reg[rname[rs2]] & 0x1F)
+                out = reg[rname[rs1]] >> pos
+                if reg[rname[rs1]] >> 31:
+                    out |= (0xFFFFFFFF << (31 - pos)) & 0xFFFFFFFF
+                reg[rname[rd]] = out
+                reg['pc'] += 4
+            else:
+                reg[rname[rd]] = reg[rname[rs1]] >> (reg[rname[rs2]] & 0x1F)
+                reg['pc'] += 4
         elif self.funct3() == Funct3.AND:
-            reg[rname[rd]] = reg[rname[rs1]]& reg[rname[rs2]]
+            reg[rname[rd]] = reg[rname[rs1]] & reg[rname[rs2]]
             reg['pc'] += 4
         elif self.funct3() == Funct3.XOR:
             reg[rname[rd]] = reg[rname[rs1]] ^ reg[rname[rs2]]
@@ -371,7 +388,7 @@ def dump():
   print('Instruction: {0:032b}'.format(cpu.ins))
 
 if __name__ == '__main__':
-  for i in glob.glob('../../riscv-tests/isa/rv32ui-p-*'):
+  for i in glob.glob('../../riscv-tests/isa/rv32ui-p-fence_i'):
     if i.endswith('.dump'):
       continue
     print("File %s" % i)
