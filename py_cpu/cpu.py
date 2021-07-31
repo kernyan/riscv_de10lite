@@ -6,7 +6,7 @@ import struct
 from enum import Enum
 import pdb
 
-DEBUG = True
+DEBUG = False
 
 def printd(str):
     if DEBUG:
@@ -56,12 +56,17 @@ class Rom:
     self.dat = {}
 
   def __getitem__(self, key):
-    if OffSet(key) > len(self.dat) or OffSet(key) < 0:
+    if key >= MOFF:
+        return load(key)
+    elif OffSet(key) > len(self.dat) or OffSet(key) < 0:
       panic("Address out of range %08x" % key)
     return self.dat[OffSet(key)]
 
   def __setitem__(self, key, value):
-    self.dat[key] = value
+    if key < 0:
+        panic("Writing to mem through register %08x %08x" % (key, value))
+    else:
+        self.dat[key] = value
 
 class Ops(Enum):
   INVALID  = 0b0
@@ -388,7 +393,7 @@ def dump():
   print('Instruction: {0:032b}'.format(cpu.ins))
 
 if __name__ == '__main__':
-  for i in glob.glob('../../riscv-tests/isa/rv32ui-p-fence_i'):
+  for i in glob.glob('../../riscv-tests/isa/rv32ui-p-*'):
     if i.endswith('.dump'):
       continue
     print("File %s" % i)
