@@ -56,7 +56,7 @@ set_global_assignment -name EDA_GENERATE_FUNCTIONAL_NETLIST OFF -section_id eda_
 set_global_assignment -name EDA_GENERATE_FUNCTIONAL_NETLIST OFF -section_id eda_board_design_boundary_scan
 
 # file
-set_global_assignment -name VERILOG_FILE src/riscv_cpu.v
+set_global_assignment -name VERILOG_FILE src/top.v
 set_global_assignment -name VERILOG_FILE src/riscv.v
 set_global_assignment -name VERILOG_FILE src/simpleuart.v
 
