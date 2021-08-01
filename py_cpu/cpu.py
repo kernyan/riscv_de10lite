@@ -13,7 +13,7 @@ def printd(str):
         print(str)
 
 ENTRY = 0
-MOFF = 0
+MOFF = 0xFFFFFFFF
 rname = ['x0', 'ra', 'sp', 'gp', 'tp'] + ['t%s' % i for i in [0,1,2]] \
   + ['s0', 's1'] + ['a%s' % i for i in range(8)] + ['s%s' % i for i in range(2, 12)] \
   + ['t%s' % i for i in [3,4,5,6]] + ['pc']
@@ -393,7 +393,7 @@ def dump():
   print('Instruction: {0:032b}'.format(cpu.ins))
 
 if __name__ == '__main__':
-  for i in glob.glob('../../riscv-tests/isa/rv32ui-p-*'):
+  for i in sorted(glob.glob('../../riscv-tests/isa/rv32ui-p-*')):
     if i.endswith('.dump'):
       continue
     print("File %s" % i)
