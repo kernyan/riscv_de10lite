@@ -13,7 +13,8 @@ def printd(str):
         print(str)
 
 def Dumping():
-  if reg['pc'] > 0x800001a4:
+  Debug()
+  if reg['pc'] > 0x800001d0:
     dump()
 
 ENTRY = 0
@@ -25,7 +26,7 @@ rname = ['x0', 'ra', 'sp', 'gp', 'tp'] + ['t%s' % i for i in [0,1,2]] \
 RAM = b'\x00' * 0x3000
 
 def Debug():
-    if reg['pc'] == 0x800001ac:
+    if reg['pc'] == 0x800001dc:
       pdb.set_trace()
 
 def load(addr):
@@ -169,6 +170,15 @@ def arith(Op, x, y, alt):
     panic('Unhandled case in arith %r' % Op)
   return ret & 0xFFFFFFFF
  
+
+def BranchOp(Op, x, y):
+  return (Op == Funct3.BNE and x != y) or \
+     (Op == Funct3.BEQ and x == y) or \
+     (Op == Funct3.BLT and Signed(x) < Signed(y)) or \
+     (Op == Funct3.BLTU and x < y) or \
+     (Op == Funct3.BGE and Signed(x) >= Signed(y)) or \
+     (Op == Funct3.BGEU and x >= y)
+
 class CPU:
   def __init__(self):
     self.ins = 0
@@ -178,7 +188,6 @@ class CPU:
     self.imm_b = 0
     self.imm_u = 0
     self.imm_j = 0
-    self.writeback = False
 
   def funct3(self):
     try:
@@ -222,69 +231,66 @@ class CPU:
     rs1 = self.rs1()
     rs2 = self.rs2()
 
-    x = reg[rname[rs1]]
-    y = {Ops.OP_IMM   : self.imm_i, 
-         Ops.LOAD     : self.imm_i, 
-         Ops.SYSTEM   : self.imm_i, 
-         Ops.JAL      : self.imm_j, 
-         Ops.JALR     : self.imm_j, 
-         Ops.LUI      : self.imm_u, 
-         Ops.AUIPC    : self.imm_u, 
+    x = reg['pc'] if self.ops in [Ops.JAL, Ops.AUIPC, Ops.BRANCH] else reg[rname[rs1]]
+    y = {Ops.OP_IMM   : self.imm_i,
+         Ops.LOAD     : self.imm_i,
+         Ops.SYSTEM   : self.imm_i,
+         Ops.JALR     : self.imm_i,
+         Ops.JAL      : self.imm_j,
+         Ops.LUI      : self.imm_u,
+         Ops.AUIPC    : self.imm_u,
          Ops.STORE    : self.imm_s,
-         Ops.BRANCH   : reg[rname[rs2]],
+         Ops.BRANCH   : self.imm_b,
          Ops.OP       : reg[rname[rs2]],
          Ops.MISC_MEM : 0}[self.ops]
+
+    to_branch = self.ops in [Ops.JAL, Ops.JALR] or (self.ops == Ops.BRANCH and BranchOp(self.funct3(), reg[rname[rs1]], reg[rname[rs2]]))
 
     alt = self.bits(30,30) and \
           ((self.ops in [Ops.OP_IMM, Ops.OP] and self.funct3() == Funct3.SRL) \
           or (self.ops == Ops.OP and self.funct3() == Funct3.ADD))
 
-    self.writeback = self.ops in [Ops.OP_IMM]
+    write_back = self.ops in \
+        [Ops.JAL,
+        Ops.JALR,
+        Ops.OP_IMM,
+        Ops.OP,
+        Ops.AUIPC,
+        #Ops.LOAD,
+        Ops.LUI]
+
+    out = 0
 
     if self.ops == Ops.JAL:
-        cur = reg['pc']
-        reg['pc'] += self.imm_j
-        reg[rname[rd]] = cur + 4
+        out = arith(Funct3.ADD, x, y, alt)
     elif self.ops == Ops.JALR:
-        cur = reg['pc']
-        reg['pc'] = (reg[rname[rs1]] + self.imm_i) & 0xFFFFFFFE
-        reg[rname[rd]] = cur + 4
+        out = arith(Funct3.ADD, x, y, alt) & 0xFFFFFFFE
     elif self.ops == Ops.OP_IMM:
-        reg[rname[rd]] = arith(self.funct3(), x, y, alt)
-        reg['pc'] += 4
+        out = arith(self.funct3(), x, y, alt)
     elif self.ops == Ops.AUIPC:
-        reg[rname[rd]] = (self.imm_u + reg['pc']) & 0xFFFFFFFF
-        reg['pc'] += 4
+        out = arith(Funct3.ADD, x, y, alt)
     elif self.ops == Ops.LOAD:
         src = (reg[rname[rs1]] + self.imm_i) & 0xFFFFFFFF
         if self.funct3() == Funct3.LH:
             reg[rname[rd]] = se(load(src) & 0xFFFF, 15)
-            reg['pc'] += 4
         elif self.funct3() == Funct3.LB:
             reg[rname[rd]] = se(load(src) & 0xFF, 7)
-            reg['pc'] += 4
         elif self.funct3() == Funct3.LW:
             reg[rname[rd]] = load(src)
-            reg['pc'] += 4
         elif self.funct3() == Funct3.LHU:
             reg[rname[rd]] = load(src) & 0xFFFF
-            reg['pc'] += 4
         elif self.funct3() == Funct3.LBU:
             reg[rname[rd]] = load(src) & 0xFF
-            reg['pc'] += 4
         else:
             panic('%r %r unimplemented' % (self.ops, self.funct3()))
     elif self.ops == Ops.STORE:
         src = (reg[rname[rs1]] + self.imm_s) & 0xFFFFFFFF
         if self.funct3() == Funct3.SH:
             store(src, struct.pack('H', reg[rname[rs2]] & 0xFFFF))
-            reg['pc'] += 4
         elif self.funct3() == Funct3.SB:
             store(src, struct.pack('B', reg[rname[rs2]] & 0xFF))
-            reg['pc'] += 4
         elif self.funct3() == Funct3.SW:
             store(src, struct.pack('I', reg[rname[rs2]]))
-            reg['pc'] += 4
         else:
             panic('%r %r unimplemented' % (self.ops, self.funct3()))
     elif self.ops == Ops.SYSTEM:
@@ -296,45 +302,26 @@ class CPU:
         else:
             # CSR not implemented
             pass
-        reg['pc'] += 4
     elif self.ops == Ops.BRANCH:
-        Branch = False
-        if self.funct3() == Funct3.BNE:
-            if reg[rname[rs1]] != reg[rname[rs2]]:
-                Branch = True
-        elif self.funct3() == Funct3.BEQ:
-            if reg[rname[rs1]] == reg[rname[rs2]]:
-                Branch = True
-        elif self.funct3() == Funct3.BLT:
-            if Signed(reg[rname[rs1]]) < Signed(reg[rname[rs2]]):
-                Branch = True
-        elif self.funct3() == Funct3.BLTU:
-            if reg[rname[rs1]] < reg[rname[rs2]]:
-                Branch = True
-        elif self.funct3() == Funct3.BGE:
-            if Signed(reg[rname[rs1]]) >= Signed(reg[rname[rs2]]):
-                Branch = True
-        elif self.funct3() == Funct3.BGEU:
-            if reg[rname[rs1]] >= reg[rname[rs2]]:
-                Branch = True
-        else:
-            panic('Branch {!r} not implemented'.format(self.funct3()))
-
-        if Branch:
-            reg['pc'] = (reg['pc'] + self.imm_b) & 0xFFFFFFFF
-        else:
-            reg['pc'] += 4
+        out = arith(Funct3.ADD, x, y, alt)
     elif self.ops == Ops.LUI:
-        reg[rname[rd]] = self.imm_u
-        reg['pc'] += 4
+        out = arith(Funct3.ADD, 0, y, alt)
     elif self.ops == Ops.MISC_MEM:
         # ignore as no memory reordering in emulation
-        reg['pc'] += 4
+        pass
     elif self.ops == Ops.OP:
-        reg[rname[rd]] = arith(self.funct3(), x, y, alt)
-        reg['pc'] += 4
+        out = arith(self.funct3(), x, y, alt)
     else:
         panic('Write opcode %r' % self.ops)
+
+    if write_back:
+      reg[rname[rd]] = (reg['pc'] + 4) if self.ops in [Ops.JAL, Ops.JALR] else out
+
+    if to_branch:
+      reg['pc'] = out
+    else:
+      reg['pc'] += 4
+
     #Dumping()
     return True
     
