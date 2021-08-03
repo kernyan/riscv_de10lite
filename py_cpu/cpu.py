@@ -179,6 +179,22 @@ def BranchOp(Op, x, y):
      (Op == Funct3.BGE and Signed(x) >= Signed(y)) or \
      (Op == Funct3.BGEU and x >= y)
 
+def extend(Op, val):
+    ret = 0
+    if Op== Funct3.LH:
+        ret = se(val & 0xFFFF, 15)
+    elif Op== Funct3.LB:
+        ret = se(val & 0xFF, 7)
+    elif Op== Funct3.LW:
+        ret = val
+    elif Op== Funct3.LHU:
+        ret = val & 0xFFFF
+    elif Op== Funct3.LBU:
+        ret = val & 0xFF
+    else:
+        panic('Unhandled case in extend %r' % Op)
+    return ret
+
 class CPU:
   def __init__(self):
     self.ins = 0
@@ -256,7 +272,7 @@ class CPU:
         Ops.OP_IMM,
         Ops.OP,
         Ops.AUIPC,
-        #Ops.LOAD,
+        Ops.LOAD,
         Ops.LUI]
 
     out = 0
@@ -270,19 +286,7 @@ class CPU:
     elif self.ops == Ops.AUIPC:
         out = arith(Funct3.ADD, x, y, alt)
     elif self.ops == Ops.LOAD:
-        src = (reg[rname[rs1]] + self.imm_i) & 0xFFFFFFFF
-        if self.funct3() == Funct3.LH:
-            reg[rname[rd]] = se(load(src) & 0xFFFF, 15)
-        elif self.funct3() == Funct3.LB:
-            reg[rname[rd]] = se(load(src) & 0xFF, 7)
-        elif self.funct3() == Funct3.LW:
-            reg[rname[rd]] = load(src)
-        elif self.funct3() == Funct3.LHU:
-            reg[rname[rd]] = load(src) & 0xFFFF
-        elif self.funct3() == Funct3.LBU:
-            reg[rname[rd]] = load(src) & 0xFF
-        else:
-            panic('%r %r unimplemented' % (self.ops, self.funct3()))
+        out = extend(self.funct3(), load(arith(Funct3.ADD, x, y, alt)))
     elif self.ops == Ops.STORE:
         src = (reg[rname[rs1]] + self.imm_s) & 0xFFFFFFFF
         if self.funct3() == Funct3.SH:
