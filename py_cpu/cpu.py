@@ -12,6 +12,10 @@ def printd(str):
     if DEBUG:
         print(str)
 
+def Dumping():
+  if reg['pc'] > 0x800001a4:
+    dump()
+
 ENTRY = 0
 MOFF = 0xFFFFFFFF
 rname = ['x0', 'ra', 'sp', 'gp', 'tp'] + ['t%s' % i for i in [0,1,2]] \
@@ -21,8 +25,8 @@ rname = ['x0', 'ra', 'sp', 'gp', 'tp'] + ['t%s' % i for i in [0,1,2]] \
 RAM = b'\x00' * 0x3000
 
 def Debug():
-    if reg['pc'] == 0x800001c8:
-        pdb.set_trace()
+    if reg['pc'] == 0x800001ac:
+      pdb.set_trace()
 
 def load(addr):
     addr -= MOFF
@@ -142,6 +146,29 @@ def se(brange, size):
         return (1 << 32) - ((1 << (size + 1)) - brange)
     return brange
 
+def arith(Op, x, y, alt):
+  ret = 0
+  if Op == Funct3.ADD:
+    ret = x - y if alt else x + y
+  elif Op == Funct3.SLL:
+    ret = x << (y & 0x1F)
+  elif Op == Funct3.SLT:
+    ret = Signed(x) < Signed(y)
+  elif Op == Funct3.SLTU:
+    ret = x < y
+  elif Op == Funct3.XOR:
+    ret = x ^ y
+  elif Op == Funct3.SRL: # Ops.SRA if alt
+    y = y & 0x1F
+    ret = ((x >> y) | ((0xFFFFFFFF * (x >> 31)) << (31 - y))) if alt else (x >> y)
+  elif Op == Funct3.OR:
+    ret = x | y
+  elif Op == Funct3.AND:
+    ret = x & y
+  else:
+    panic('Unhandled case in arith %r' % Op)
+  return ret & 0xFFFFFFFF
+ 
 class CPU:
   def __init__(self):
     self.ins = 0
@@ -151,6 +178,7 @@ class CPU:
     self.imm_b = 0
     self.imm_u = 0
     self.imm_j = 0
+    self.writeback = False
 
   def funct3(self):
     try:
@@ -193,6 +221,26 @@ class CPU:
     rd = self.rd()
     rs1 = self.rs1()
     rs2 = self.rs2()
+
+    x = reg[rname[rs1]]
+    y = {Ops.OP_IMM   : self.imm_i, 
+         Ops.LOAD     : self.imm_i, 
+         Ops.SYSTEM   : self.imm_i, 
+         Ops.JAL      : self.imm_j, 
+         Ops.JALR     : self.imm_j, 
+         Ops.LUI      : self.imm_u, 
+         Ops.AUIPC    : self.imm_u, 
+         Ops.STORE    : self.imm_s,
+         Ops.BRANCH   : reg[rname[rs2]],
+         Ops.OP       : reg[rname[rs2]],
+         Ops.MISC_MEM : 0}[self.ops]
+
+    alt = self.bits(30,30) and \
+          ((self.ops in [Ops.OP_IMM, Ops.OP] and self.funct3() == Funct3.SRL) \
+          or (self.ops == Ops.OP and self.funct3() == Funct3.ADD))
+
+    self.writeback = self.ops in [Ops.OP_IMM]
+
     if self.ops == Ops.JAL:
         cur = reg['pc']
         reg['pc'] += self.imm_j
@@ -202,46 +250,8 @@ class CPU:
         reg['pc'] = (reg[rname[rs1]] + self.imm_i) & 0xFFFFFFFE
         reg[rname[rd]] = cur + 4
     elif self.ops == Ops.OP_IMM:
-        if self.funct3() == Funct3.ADDI:
-            if self.imm_i == 0 and rname[rd] == 'x0' and rname[rs1] == 'x0':
-                pass
-            elif rs1 == 0:
-                reg[rname[rd]] = self.imm_i
-            else:
-                reg[rname[rd]] = (reg[rname[rs1]] + self.imm_i) & 0xFFFFFFFF
-            reg['pc'] += 4
-        elif self.funct3() == Funct3.SLLI:
-            reg[rname[rd]] = (reg[rname[rs1]] << self.bits(24,20)) & 0xFFFFFFFF
-            reg['pc'] += 4
-        elif self.funct3() == Funct3.SLTI:
-            reg[rname[rd]] = 1 if (Signed(reg[rname[rs1]]) < Signed(self.imm_i)) else 0
-            reg['pc'] += 4
-        elif self.funct3() == Funct3.SLTIU:
-            reg[rname[rd]] = 1 if (reg[rname[rs1]] < self.imm_i) else 0
-            reg['pc'] += 4
-        elif self.funct3() == Funct3.SRAI:
-            if self.bits(30,30): # SRAI
-                sb = reg[rname[rs1]] >> 31
-                out = (reg[rname[rs1]] >> self.bits(24,20)) 
-                out |= ((0xFFFFFFFF * sb) << (31 - self.bits(24,20))) & 0xFFFFFFFF
-                reg[rname[rd]] = out
-            else: #SRLI
-                reg[rname[rd]] = (reg[rname[rs1]] >> self.bits(24,20))
-            reg['pc'] += 4
-        elif self.funct3() == Funct3.ANDI:
-            reg[rname[rd]] = reg[rname[rs1]] & self.imm_i
-            reg['pc'] += 4
-        elif self.funct3() == Funct3.ORI:
-            reg[rname[rd]] = reg[rname[rs1]] | self.imm_i
-            reg['pc'] += 4
-        elif self.funct3() == Funct3.XORI:
-            if Signed(self.imm_i) == -1:
-                reg[rname[rd]] = ~reg[rname[rs1]]
-            else:
-                reg[rname[rd]] = reg[rname[rs1]] ^ self.imm_i
-            reg['pc'] += 4
-        else:
-            panic('Write {!r} Funct3: {!r}'.format(self.ops, self.funct3()))
+        reg[rname[rd]] = arith(self.funct3(), x, y, alt)
+        reg['pc'] += 4
     elif self.ops == Ops.AUIPC:
         reg[rname[rd]] = (self.imm_u + reg['pc']) & 0xFFFFFFFF
         reg['pc'] += 4
@@ -321,52 +331,11 @@ class CPU:
         # ignore as no memory reordering in emulation
         reg['pc'] += 4
     elif self.ops == Ops.OP:
-        if self.funct3() == Funct3.XOR:
-            if rname[rd] != 'x0': # not specified in spec?
-                reg[rname[rd]] = reg[rname[rs1]] ^ reg[rname[rs2]]
-            reg['pc'] += 4
-        elif self.funct3() == Funct3.ADD:
-            if self.ins >> 30: # SUB
-                reg[rname[rd]] = (reg[rname[rs1]] - reg[rname[rs2]]) & 0xFFFFFFFF
-            else: # ADD
-                reg[rname[rd]] = (reg[rname[rs1]] + reg[rname[rs2]]) & 0xFFFFFFFF
-            reg['pc'] += 4
-        elif self.funct3() == Funct3.SLL:
-            reg[rname[rd]] = (reg[rname[rs1]] << (reg[rname[rs2]] & 0x1F)) & 0xFFFFFFFF
-            reg['pc'] += 4
-        elif self.funct3() == Funct3.SRL:
-            if self.bits(30,30): # SRA
-                pos = (reg[rname[rs2]] & 0x1F)
-                out = reg[rname[rs1]] >> pos
-                if reg[rname[rs1]] >> 31:
-                    out |= (0xFFFFFFFF << (31 - pos)) & 0xFFFFFFFF
-                reg[rname[rd]] = out
-                reg['pc'] += 4
-            else:
-                reg[rname[rd]] = reg[rname[rs1]] >> (reg[rname[rs2]] & 0x1F)
-                reg['pc'] += 4
-        elif self.funct3() == Funct3.AND:
-            reg[rname[rd]] = reg[rname[rs1]] & reg[rname[rs2]]
-            reg['pc'] += 4
-        elif self.funct3() == Funct3.XOR:
-            reg[rname[rd]] = reg[rname[rs1]] ^ reg[rname[rs2]]
-            reg['pc'] += 4
-        elif self.funct3() == Funct3.OR:
-            reg[rname[rd]] = reg[rname[rs1]] | reg[rname[rs2]]
-            reg['pc'] += 4
-        elif self.funct3() == Funct3.SLT:
-            reg[rname[rd]] = 1 if (Signed(reg[rname[rs1]]) < Signed(reg[rname[rs2]])) else 0
-            reg['pc'] += 4
-        elif self.funct3() == Funct3.SLTU:
-            if rname[rs1] == 'x0':
-                reg[rname[rd]] = 1 if reg[rname[rs2]] else 0
-            else:
-                reg[rname[rd]] = 1 if (reg[rname[rs1]] < reg[rname[rs2]]) else 0
-            reg['pc'] += 4
-        else:
-            panic('Write Ops.OP %r' % self.funct3())
+        reg[rname[rd]] = arith(self.funct3(), x, y, alt)
+        reg['pc'] += 4
     else:
         panic('Write opcode %r' % self.ops)
+    #Dumping()
     return True
     
   def step(self):
