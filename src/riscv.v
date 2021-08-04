@@ -11,15 +11,6 @@ module riscv_i (
   output ser_tx
   );
 
-/*
-Strategy
-1. read memory
-2. fetch
-3. decode
-4. execute
-5. store
-*/
-
 localparam MEMSIZE = 2055;
 localparam ENTRY   = 'h8000_0000;
 
@@ -50,6 +41,7 @@ reg alt;
 reg [31:0] out;
 reg success;
 reg fail;
+reg [2:0] temp1;
 
 function [31:0] idx(input [31:0] addr);
 begin
@@ -59,15 +51,28 @@ endfunction
 
 function [31:0] extend(
   input [ 2:0] fun3_in,
-  input [31:0] val_in
+  input [31:0] val_in,
+  input [ 1:0] mod_in
   );
+reg [ 1:0] mod;
+reg [31:0] word;
+reg [ 2:0] size;
 begin
+  if (mod_in == 2'b0)
+    word = val_in;
+  else if (mod_in == 2'b10)
+    word = { 16'b0,  val_in[31:16] };
+  else if (mod_in == 2'b1)
+    word = {  8'b0,  val_in[31: 8] };
+  else
+    word = { 24'b0,  val_in[31:24] };
+
   case (fun3_in)
-  3'b000: extend = { {25{val_in[ 7]}}, val_in[ 6:0] }; // LB
-  3'b001: extend = { {17{val_in[15]}}, val_in[14:0] }; // LH
-  3'b010: extend = val_in;                             // LW
-  3'b100: extend = { 24'b0, val_in[ 7:0] };            // LBU
-  3'b101: extend = { 16'b0, val_in[15:0] };            // LHU
+  3'b000: extend = { {25{word[ 7]}}, word[ 6:0] }; // LB
+  3'b001: extend = { {17{word[15]}}, word[14:0] }; // LH
+  3'b010: extend = word;                           // LW
+  3'b100: extend = { 24'b0, word[ 7:0] };          // LBU
+  3'b101: extend = { 16'b0, word[15:0] };          // LHU
   endcase
 end
 endfunction
@@ -75,11 +80,12 @@ endfunction
 task store(
   input [ 2:0] fun3_in,
   input [31:0] val_in,
+  input [ 1:0] mod_in,
   output [31:0] mem_out
   );
 begin
   case (fun3_in)
-  3'b000: mem_out[ 7:0] = val_in[ 7:0];
+  3'b000: mem_out[mod_in*8+7-:8] = val_in[ 7:0];
   3'b001: mem_out[15:0] = val_in[15:0];
   3'b010: mem_out = val_in;
   endcase
@@ -124,7 +130,7 @@ integer i;
 
 initial 
 begin
-  $readmemh("tests/rv32ui-p-fence_i.dat", mem); 
+  $readmemh("tests/rv32ui-p-sra.dat", mem); 
   PC     = ENTRY;
   //rgs[0] = 32'b0;
 
@@ -188,20 +194,22 @@ begin
         3'b0  : alt = 1'b1 & ins[30]; // ADD
       endcase
   endcase
+
+  temp1 = arith(3'b0, x, y, alt) % 4;
     
   case (op)
-    7'b000_0011: out = extend(fun3,    mem[idx(arith(3'b0, x, y, alt))]); // load
-    7'b010_0011: store(fun3, rgs[rs2], mem[idx(arith(3'b0, x, y, alt))]); // store
+    7'b000_0011: out = extend(fun3, mem[idx(arith(3'b0, x, y, alt))]   , arith(3'b0, x, y, alt) % 4); // load
+    7'b010_0011: store(fun3, rgs[rs2], mem[idx(arith(3'b0, x, y, alt))], temp1); // store
     7'b001_0011: out = arith(fun3, x, y, alt);  // op_imm
     7'b011_0011: out = arith(fun3, x, y, alt);  // op
     7'b001_0111: out = arith(3'b0, x, y, alt);  // auipc
     7'b011_0111: out = arith(3'b0, 32'b0, y, alt); // lui
     7'b110_0011: out = arith(3'b0, x, y, alt);  // branch
-    7'b110_0111: out = arith(3'b0, x, y, alt) & {31'b1, 1'b0}; // jalr
+    7'b110_0111: out = arith(3'b0, x, y, alt) & 32'hfffffffe; // jalr
     7'b110_1111: out = arith(3'b0, x, y, alt);  // jal
     7'b111_0011:                                // system
-      if (fun3 == 3'b1 && imm_i == 32'hc0001073) // hack to match test exit condition
-        success = 1'b0;
+      if (ins == 32'hc0001073) // hack to match test exit condition
+        success = 1'b1;
       else if (fun3 == 3'b0 && rgs[3] > 1)      // hack to match test fail condition (gp reg)
         fail = 1'b0;
     7'b000_1111:;                               // misc_mem
@@ -229,9 +237,12 @@ begin
   $display("imm_b: %08x", imm_b);
   $display("imm_u: %08x", imm_u);
   $display("imm_j: %08x", imm_j);
-  $display("   a0: %08x", rgs[10]);
   $display("   x0: %08x", rgs[0]);
+  $display("   a0: %08x", rgs[10]);
+  $display("   a5: %08x", rgs[15]);
+  $display("   t4: %08x", rgs[29]);
   $display("    x: %08x", x);
+  $display("    y: %08x", y);
   $display("  out: %08x\n", out);
   `endif
 
@@ -258,12 +269,12 @@ begin
   if (success)
     begin
     $display("Success");
-    $stop;
+    $finish;
     end
   else if (fail)
     begin
     $display("Failed");
-    $stop;
+    $finish;
     end
 end
 `endif
