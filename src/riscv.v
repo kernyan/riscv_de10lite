@@ -42,6 +42,8 @@ reg [ 4:0] rs1;
 reg [ 4:0] rs2;
 
 // working reg
+
+wire [31:0] x0 = 32'b0;
 reg [31:0] x;
 reg [31:0] y;
 reg alt;
@@ -69,11 +71,6 @@ begin
   endcase
 end
 endfunction
-
-//  # Ops.STORE
-//  SB = 0b000
-//  SH = 0b001
-//  SW = 0b010
 
 task store(
   input [ 2:0] fun3_in,
@@ -123,13 +120,18 @@ begin
 end
 endfunction
 
+integer i;
+
 initial 
 begin
   $readmemh("tests/rv32ui-p-fence_i.dat", mem); 
   PC     = ENTRY;
-  rgs[0] = 32'b0;
+  //rgs[0] = 32'b0;
 
-  #1000 $finish;
+  for (i = 0; i < 32; i += 1)
+    rgs[i] = 32'b0;
+
+  //#1000 $finish;
 end
 
 `ifdef CPU
@@ -207,55 +209,63 @@ begin
 
   // store
 
-  case (op)
-    7'b110_1111: // JAL
-      PC = out;
-    7'b110_0111: // JALR
-      PC = out;
-    7'b110_0011: // BRANCH
-      PC = out;
-    default:
-      PC += 4;
-  endcase
+  if (rd != 5'b0)
+    case (op)
+      7'b000_0011: rgs[rd] = out; // load
+      7'b001_0011: rgs[rd] = out; // op_imm
+      7'b011_0011: rgs[rd] = out; // op
+      7'b001_0111: rgs[rd] = out; // auipc
+      7'b011_0111: rgs[rd] = out; // lui
+      7'b110_0111: rgs[rd] = PC + 4; // jalr
+      7'b110_1111: rgs[rd] = PC + 4; // jal
+    endcase
 
   // debugging information
   `ifdef DEBUG
+  $display("PC   : %08x OP: %08x", 32'h80002004, mem[idx(32'h80002004)]);
   $display("PC   : %08x OP: %08x", PC, ins);
   $display("imm_i: %08x", imm_i);
   $display("imm_s: %08x", imm_s);
   $display("imm_b: %08x", imm_b);
   $display("imm_u: %08x", imm_u);
   $display("imm_j: %08x", imm_j);
+  $display("   a0: %08x", rgs[10]);
+  $display("   x0: %08x", rgs[0]);
   $display("    x: %08x", x);
   $display("  out: %08x\n", out);
   `endif
 
-  PC += 4;
+  // jump
 
+  case (op)
+    7'b110_1111: // JAL
+      PC = out;
+    7'b110_0111: // JALR
+      PC = out;
+    7'b110_0011: // BRANCH
+      case (fun3)
+      3'b000: if (rgs[rs1] == rgs[rs2])                   PC = out; else PC += 4; // BEQ
+      3'b001: if (rgs[rs1] != rgs[rs2])                   PC = out; else PC += 4; // BNE
+      3'b100: if ($signed(rgs[rs1])  < $signed(rgs[rs2])) PC = out; else PC += 4; // BLT
+      3'b101: if ($signed(rgs[rs1]) >= $signed(rgs[rs2])) PC = out; else PC += 4; // BGE
+      3'b110: if (rgs[rs1]  < rgs[rs2])                   PC = out; else PC += 4; // BLTU
+      3'b111: if (rgs[rs1] >= rgs[rs2])                   PC = out; else PC += 4; // BGEU
+      endcase
+    default:
+      PC += 4;
+  endcase
+
+  if (success)
+    begin
+    $display("Success");
+    $stop;
+    end
+  else if (fail)
+    begin
+    $display("Failed");
+    $stop;
+    end
 end
 `endif
 
 endmodule
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
