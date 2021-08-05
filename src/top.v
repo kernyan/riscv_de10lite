@@ -1,6 +1,8 @@
 // top
 
-`define SIM
+//`define SIM
+
+`ifdef SIM
 
 module riscv_cpu (
   input [3:0] Switch,
@@ -25,8 +27,6 @@ begin
   Clk = 1'b0;
   forever #10 Clk = ~Clk;
 end
-
-`ifdef SIM
 
 `else
 

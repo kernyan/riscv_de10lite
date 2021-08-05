@@ -132,7 +132,7 @@ begin
   $readmemh("tests/rv32ui-p-and.dat", mem);
   PC = ENTRY;
 
-  for (i = 0; i < 32; i += 1)
+  for (i = 0; i < 32; i = i + 1)
     rgs[i] = 32'b0;
 end
 
@@ -256,15 +256,15 @@ begin
       PC = out;
     7'b110_0011: // BRANCH
       case (fun3)
-      3'b000: if (rgs[rs1] == rgs[rs2])                   PC = out; else PC += 4; // BEQ
-      3'b001: if (rgs[rs1] != rgs[rs2])                   PC = out; else PC += 4; // BNE
-      3'b100: if ($signed(rgs[rs1])  < $signed(rgs[rs2])) PC = out; else PC += 4; // BLT
-      3'b101: if ($signed(rgs[rs1]) >= $signed(rgs[rs2])) PC = out; else PC += 4; // BGE
-      3'b110: if (rgs[rs1]  < rgs[rs2])                   PC = out; else PC += 4; // BLTU
-      3'b111: if (rgs[rs1] >= rgs[rs2])                   PC = out; else PC += 4; // BGEU
+      3'b000: if (rgs[rs1] == rgs[rs2])                   PC = out; else PC = PC + 4; // BEQ
+      3'b001: if (rgs[rs1] != rgs[rs2])                   PC = out; else PC = PC + 4; // BNE
+      3'b100: if ($signed(rgs[rs1])  < $signed(rgs[rs2])) PC = out; else PC = PC + 4; // BLT
+      3'b101: if ($signed(rgs[rs1]) >= $signed(rgs[rs2])) PC = out; else PC = PC + 4; // BGE
+      3'b110: if (rgs[rs1]  < rgs[rs2])                   PC = out; else PC = PC + 4; // BLTU
+      3'b111: if (rgs[rs1] >= rgs[rs2])                   PC = out; else PC = PC + 4; // BGEU
       endcase
     default:
-      PC += 4;
+      PC = PC + 4;
   endcase
 
   if (success)
