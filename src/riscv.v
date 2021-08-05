@@ -1,7 +1,7 @@
 // cpu
 
 `define CPU
-`define DEBUG
+//`define DEBUG
 
 module riscv_i (
   input clk,
@@ -34,14 +34,13 @@ reg [ 4:0] rs2;
 
 // working reg
 
-wire [31:0] x0 = 32'b0;
 reg [31:0] x;
 reg [31:0] y;
 reg alt;
+reg [2:0] byte_idx;
 reg [31:0] out;
 reg success;
 reg fail;
-reg [2:0] temp1;
 
 function [31:0] idx(input [31:0] addr);
 begin
@@ -130,14 +129,11 @@ integer i;
 
 initial 
 begin
-  $readmemh("tests/rv32ui-p-sra.dat", mem); 
-  PC     = ENTRY;
-  //rgs[0] = 32'b0;
+  $readmemh("tests/rv32ui-p-and.dat", mem);
+  PC = ENTRY;
 
   for (i = 0; i < 32; i += 1)
     rgs[i] = 32'b0;
-
-  //#1000 $finish;
 end
 
 `ifdef CPU
@@ -193,13 +189,15 @@ begin
         3'b101: alt = 1'b1 & ins[30]; // SRL
         3'b0  : alt = 1'b1 & ins[30]; // ADD
       endcase
+    default:
+      alt = 1'b0;
   endcase
 
-  temp1 = arith(3'b0, x, y, alt) % 4;
+  byte_idx = arith(3'b0, x, y, alt) % 4;
     
   case (op)
-    7'b000_0011: out = extend(fun3, mem[idx(arith(3'b0, x, y, alt))]   , arith(3'b0, x, y, alt) % 4); // load
-    7'b010_0011: store(fun3, rgs[rs2], mem[idx(arith(3'b0, x, y, alt))], temp1); // store
+    7'b000_0011: out = extend(fun3, mem[idx(arith(3'b0, x, y, alt))]   , byte_idx); // load
+    7'b010_0011: store(fun3, rgs[rs2], mem[idx(arith(3'b0, x, y, alt))], byte_idx); // store
     7'b001_0011: out = arith(fun3, x, y, alt);  // op_imm
     7'b011_0011: out = arith(fun3, x, y, alt);  // op
     7'b001_0111: out = arith(3'b0, x, y, alt);  // auipc
@@ -230,7 +228,6 @@ begin
 
   // debugging information
   `ifdef DEBUG
-  $display("PC   : %08x OP: %08x", 32'h80002004, mem[idx(32'h80002004)]);
   $display("PC   : %08x OP: %08x", PC, ins);
   $display("imm_i: %08x", imm_i);
   $display("imm_s: %08x", imm_s);
@@ -239,7 +236,11 @@ begin
   $display("imm_j: %08x", imm_j);
   $display("   x0: %08x", rgs[0]);
   $display("   a0: %08x", rgs[10]);
+  $display("   ra: %08x", rgs[1]);
+  $display("   sp: %08x", rgs[2]);
+  $display("   a4: %08x", rgs[14]);
   $display("   a5: %08x", rgs[15]);
+  $display("   t2: %08x", rgs[27]);
   $display("   t4: %08x", rgs[29]);
   $display("    x: %08x", x);
   $display("    y: %08x", y);
