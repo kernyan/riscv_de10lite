@@ -1,53 +1,41 @@
 // top
 
-//`define SIM
+`default_nettype none
 
-`ifdef SIM
-
-module riscv_cpu (
-  input [3:0] Switch,
-  output [7:0] Led_Out,
-  output Uart_Tx,
-  input  Uart_Rx
-	);
-
-wire [7:0] soc_led;
-reg Clk;
-
-riscv_i cpu_i(
-    .clk(Clk),
-    .reset(Switch[0]),
-    .led(Led_Out),
-    .ser_tx(Uart_Tx),
-    .ser_rx(Uart_Rx)
-);
-
-initial
-begin
-  Clk = 1'b0;
-  forever #10 Clk = ~Clk;
-end
-
-`else
+`define SIM
 
 module riscv_cpu (
   input Clk,
   input [3:0] Switch,
-  output [7:0] Led_Out,
+  output [9:0] Led_Out,
   output Uart_Tx,
   input  Uart_Rx
 	);
 
-wire [7:0] soc_led;
+reg Clk50 = 1'b0;
+`ifdef SIM
+initial begin
+  forever #1 Clk50 <= ~Clk50;
+end
+`else
+always@(posedge Clk)
+  Clk50 <= ~Clk50;
+`endif
+
+reg ClkDiv = 1'b0;
+reg [3:0] Ctr = 4'b0; // 50 Mhz / 2 ^ 23 ~ 6 Hz
+
+always@(posedge Clk50) begin
+  $display("Clk %d %d", Ctr, ClkDiv);
+  { ClkDiv, Ctr } <= Ctr + 1'b1;
+  end
 
 riscv_i cpu_i(
-    .clk(Clk),
-    .reset(Switch[0]),
-    .led(Led_Out),
+    .clk   (ClkDiv),
+    .reset (Switch[0]),
+    .led   (Led_Out),
     .ser_tx(Uart_Tx),
     .ser_rx(Uart_Rx)
 );
-
-`endif
 
 endmodule

@@ -6,7 +6,7 @@
 module riscv_i (
   input clk,
   input reset,
-  output reg [7:0] led,
+  output reg [9:0] led,
   input ser_rx,
   output ser_tx
   );
@@ -228,7 +228,7 @@ begin
 
   // debugging information
   `ifdef DEBUG
-  $display("PC   : %08x OP: %08x", PC, ins);
+  $display($time, " PC   : %08x OP: %08x", PC, ins);
   $display("imm_i: %08x", imm_i);
   $display("imm_s: %08x", imm_s);
   $display("imm_b: %08x", imm_b);
@@ -270,11 +270,13 @@ begin
   if (success)
     begin
     $display("Success");
+    led = 10'b1010101010;
     $finish;
     end
   else if (fail)
     begin
     $display("Failed");
+    led = 10'b101010101;
     $finish;
     end
 end
