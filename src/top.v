@@ -2,7 +2,7 @@
 
 `default_nettype none
 
-`define SIM
+//`define SIM
 
 module riscv_cpu (
   input Clk,
@@ -23,7 +23,7 @@ always@(posedge Clk)
 `endif
 
 reg ClkDiv = 1'b0;
-reg [3:0] Ctr = 4'b0; // 50 Mhz / 2 ^ 23 ~ 6 Hz
+reg [21:0] Ctr = 22'b0; // 50 Mhz / 2 ^ 23 ~ 6 Hz
 
 always@(posedge Clk50) begin
   $display("Clk %d %d", Ctr, ClkDiv);
