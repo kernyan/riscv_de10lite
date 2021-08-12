@@ -1,7 +1,69 @@
 // cpu
+`default_nettype none
 
 `define CPU
 //`define DEBUG
+
+module store(
+  input clk,
+  input wire [ 2:0] fun3_in,
+  input wire [31:0] val_in,
+  input wire [ 1:0] mod_in,
+  output reg [31:0] mem_out
+  );
+
+always@(posedge clk)
+begin
+  case (fun3_in)
+  3'b000: mem_out[mod_in*8+7-:8] = val_in[ 7:0];
+  3'b001: mem_out[15:0] = val_in[15:0];
+  3'b010: mem_out = val_in;
+  default: mem_out = 32'b0;
+  endcase
+end
+
+endmodule
+
+module arith(
+  input clk,
+  output reg [31:0] out,
+  input  wire [ 2:0] fun3_in,
+  input wire [31:0] x_in,
+  input wire [31:0] y_in,
+  input wire alt_in
+  );
+
+always@(posedge clk)
+begin
+  case (fun3_in)
+  3'b000:  // ADD
+    if (alt_in)
+      out <= x_in - y_in;
+    else
+      out <= x_in + y_in;
+  3'b001:  // SLL
+    out <= x_in << y_in[4:0];
+  3'b010: // SLT
+    out <= $signed(x_in) < $signed(y_in);
+  3'b011: // SLTU
+    out <= x_in < y_in;
+  3'b100: // XOR
+    out <= x_in ^ y_in;
+  3'b101: // SRL, SRA
+    if (alt_in)
+      out <= $signed(x_in) >>> y_in;
+    else
+      out <= x_in >> y_in;
+  3'b110: // OR
+    out <= x_in | y_in;
+  3'b111: // AND
+    out <= x_in & y_in;
+  default:
+    out <= 32'b0;
+  endcase
+end
+
+endmodule
 
 module riscv_i (
   input clk,
@@ -15,10 +77,8 @@ localparam MEMSIZE = 2055;
 localparam ENTRY   = 'h8000_0000;
 
 reg [31:0] mem[0:MEMSIZE];
-
 reg [31:0] PC;
 reg [31:0] rgs[0:31];
-
 reg [31:0] ins;
 reg [ 6:0] op;
 reg [ 2:0] fun3;
@@ -34,12 +94,16 @@ reg [ 4:0] rs2;
 
 // working reg
 
+wire [31:0] store_reg;
+wire [31:0] arith0;
+wire [31:0] arith3;
+wire [31:0] arithlui;
 reg [31:0] x;
 reg [31:0] y;
 reg alt;
 reg [2:0] byte_idx;
 reg [31:0] out;
-reg success;
+reg success = 1'b0;
 reg fail;
 
 function [31:0] idx(input [31:0] addr);
@@ -76,54 +140,59 @@ begin
 end
 endfunction
 
-task store(
-  input [ 2:0] fun3_in,
-  input [31:0] val_in,
-  input [ 1:0] mod_in,
-  output [31:0] mem_out
-  );
-begin
-  case (fun3_in)
-  3'b000: mem_out[mod_in*8+7-:8] = val_in[ 7:0];
-  3'b001: mem_out[15:0] = val_in[15:0];
-  3'b010: mem_out = val_in;
-  endcase
-end
-endtask
+arith arith_m1 (clk, arith0, 3'b0, x, y, alt);
+arith arith_m2 (clk, arith3, fun3, x, y, alt);
+arith arith_m3 (clk, arithlui, 3'b0, 32'b0, y, alt);
+store store_1 (clk, fun3, rgs[rs2], arith0 % 4, store_reg);
 
-function [31:0] arith(
-  input [ 2:0] fun3_in,
-  input [31:0] x_in,
-  input [31:0] y_in,
-  input alt_in
-  );
-begin
-  case (fun3_in)
-  3'b000:  // ADD
-    if (alt_in)
-      arith = x_in - y_in;
-    else
-      arith = x_in + y_in;
-  3'b001:  // SLL
-    arith = x << y[4:0];
-  3'b010: // SLT
-    arith = $signed(x) < $signed(y);
-  3'b011: // SLTU
-    arith = x < y;
-  3'b100: // XOR
-    arith = x ^ y;
-  3'b101: // SRL, SRA
-    if (alt_in)
-      arith = $signed(x) >>> y;
-    else
-      arith = x >> y;
-  3'b110: // OR
-    arith = x | y;
-  3'b111: // AND
-    arith = x & y;
-  endcase
-end
-endfunction
+//task store(
+//  input [ 2:0] fun3_in,
+//  input [31:0] val_in,
+//  input [ 1:0] mod_in,
+//  output [31:0] mem_out
+//  );
+//begin
+//  case (fun3_in)
+//  3'b000: mem_out[mod_in*8+7-:8] = val_in[ 7:0];
+//  3'b001: mem_out[15:0] = val_in[15:0];
+//  3'b010: mem_out = val_in;
+//  endcase
+//end
+//endtask
+
+//function [31:0] arith(
+//  input [ 2:0] fun3_in,
+//  input [31:0] x_in,
+//  input [31:0] y_in,
+//  input alt_in
+//  );
+//begin
+//  case (fun3_in)
+//  3'b000:  // ADD
+//    if (alt_in)
+//      arith <= x_in - y_in;
+//    else
+//      arith <= x_in + y_in;
+//  3'b001:  // SLL
+//    arith <= x << y[4:0];
+//  3'b010: // SLT
+//    arith <= $signed(x) < $signed(y);
+//  3'b011: // SLTU
+//    arith <= x < y;
+//  3'b100: // XOR
+//    arith <= x ^ y;
+//  3'b101: // SRL, SRA
+//    if (alt_in)
+//      arith <= $signed(x) >>> y;
+//    else
+//      arith <= x >> y;
+//  3'b110: // OR
+//    arith <= x | y;
+//  3'b111: // AND
+//    arith <= x & y;
+//  endcase
+//end
+//endfunction
 
 integer i;
 
@@ -133,78 +202,80 @@ begin
   PC = ENTRY;
 
   for (i = 0; i < 32; i = i + 1)
-    rgs[i] = 32'b0;
+    rgs[i] <= 32'b0;
 end
 
 `ifdef CPU
 always @(posedge clk)
 begin
+
   // fetch
 
   ins = mem[idx(PC)];
 
   // decode
 
-  imm_i = { { 20{ins[31]}}, ins[31:20] };
-  imm_s = { { 20{ins[31]}}, ins[31:25], ins[11:7] };
-  imm_b = { { 21{ins[31]}}, ins[ 7: 7], ins[30:25], ins[11: 8], 1'b0 };
-  imm_u = { ins[31:12], 12'b0 };
-  imm_j = { { 12{ins[31]}}, ins[19:12], ins[20:20], ins[30:21], 1'b0 };
+  imm_i <= { { 20{ins[31]}}, ins[31:20] };
+  imm_s <= { { 20{ins[31]}}, ins[31:25], ins[11:7] };
+  imm_b <= { { 20{ins[31]}}, ins[ 7: 7], ins[30:25], ins[11: 8], 1'b0 };
+  imm_u <= { ins[31:12], 12'b0 };
+  imm_j <= { { 12{ins[31]}}, ins[19:12], ins[20:20], ins[30:21], 1'b0 };
 
-  op    = ins[ 6: 0];
-  fun3  = ins[14:12];
-  rd    = ins[11: 7];
-  rs1   = ins[19:15];
-  rs2   = ins[24:20];
+  op    <= ins[ 6: 0];
+  fun3  <= ins[14:12];
+  rd    <= ins[11: 7];
+  rs1   <= ins[19:15];
+  rs2   <= ins[24:20];
 
   // execute
 
   case (op)
-    7'b001_0111: x = PC;
-    7'b110_0011: x = PC;
-    7'b110_1111: x = PC;
-    default    : x = rgs[rs1];
+    7'b001_0111: x <= PC;      // op_imm
+    7'b110_0011: x <= PC;      // branch
+    7'b110_1111: x <= PC;      // jal
+    default    : x <= rgs[rs1];
   endcase
 
   case (op)
-    7'b000_0011: y = imm_i;    // load
-    7'b010_0011: y = imm_s;    // store
-    7'b001_0011: y = imm_i;    // op_imm
-    7'b011_0011: y = rgs[rs2]; // op
-    7'b001_0111: y = imm_u;    // auipc
-    7'b011_0111: y = imm_u;    // lui
-    7'b110_0011: y = imm_b;    // branch
-    7'b110_0111: y = imm_i;    // jalr
-    7'b110_1111: y = imm_j;    // jal
-    7'b111_0011: y = imm_i;    // system
-    7'b000_1111: y = 32'b0;    // misc_mem
+    7'b000_0011: y <= imm_i;    // load
+    7'b010_0011: y <= imm_s;    // store
+    7'b001_0011: y <= imm_i;    // op_imm
+    7'b011_0011: y <= rgs[rs2]; // op
+    7'b001_0111: y <= imm_u;    // auipc
+    7'b011_0111: y <= imm_u;    // lui
+    7'b110_0011: y <= imm_b;    // branch
+    7'b110_0111: y <= imm_i;    // jalr
+    7'b110_1111: y <= imm_j;    // jal
+    7'b111_0011: y <= imm_i;    // system
+    7'b000_1111: y <= 32'b0;    // misc_mem
+    default:     y <= 32'b0;
   endcase
 
   case (op)
     7'b001_0011: // op_imm
       if (fun3 == 3'b101)    // SRL
-        alt = 1'b1 & ins[30];
+        alt <= 1'b1 & ins[30];
     7'b011_0011: // op
       case (fun3)
-        3'b101: alt = 1'b1 & ins[30]; // SRL
-        3'b0  : alt = 1'b1 & ins[30]; // ADD
+        3'b101: alt <= 1'b1 & ins[30]; // SRL
+        3'b0  : alt <= 1'b1 & ins[30]; // ADD
       endcase
     default:
-      alt = 1'b0;
+      alt <= 1'b0;
   endcase
 
-  byte_idx = arith(3'b0, x, y, alt) % 4;
+  //byte_idx = arith0 % 4;
     
   case (op)
-    7'b000_0011: out = extend(fun3, mem[idx(arith(3'b0, x, y, alt))]   , byte_idx); // load
-    7'b010_0011: store(fun3, rgs[rs2], mem[idx(arith(3'b0, x, y, alt))], byte_idx); // store
-    7'b001_0011: out = arith(fun3, x, y, alt);  // op_imm
-    7'b011_0011: out = arith(fun3, x, y, alt);  // op
-    7'b001_0111: out = arith(3'b0, x, y, alt);  // auipc
-    7'b011_0111: out = arith(3'b0, 32'b0, y, alt); // lui
-    7'b110_0011: out = arith(3'b0, x, y, alt);  // branch
-    7'b110_0111: out = arith(3'b0, x, y, alt) & 32'hfffffffe; // jalr
-    7'b110_1111: out = arith(3'b0, x, y, alt);  // jal
+    7'b000_0011: out = extend(fun3, mem[idx(arith0)]   , arith0 % 4); // load
+    7'b010_0011: mem[idx(arith0)] = store_reg; //store(fun3, rgs[rs2], mem[idx(arith0)], arith0 % 4); // store
+    7'b001_0011: out = arith3;                // op_imm
+    7'b011_0011: out = arith3;                // op
+    7'b001_0111: out = arith0;                // auipc
+    7'b011_0111: out = arithlui;              // lui
+    7'b110_0011: out = arith0;                // branch
+    7'b110_0111: out = arith0 & 32'hfffffffe; // jalr
+    7'b110_1111: out = arith0;                // jal
     7'b111_0011:                                // system
       if (ins == 32'hc0001073) // hack to match test exit condition
         success = 1'b1;
@@ -279,6 +350,9 @@ begin
     led = 10'b101010101;
     $finish;
     end
+  else
+    led = PC[9:0];
+
 end
 `endif
 
