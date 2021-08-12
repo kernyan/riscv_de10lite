@@ -151,7 +151,7 @@ integer i;
 
 initial 
 begin
-  $readmemh("tests/rv32ui-p-and.dat", mem);
+  $readmemh("tests/rv32ui-p-fence_i.dat", mem);
 
   for (i = 0; i < 32; i = i + 1)
     rgs[i] <= 32'b0;
