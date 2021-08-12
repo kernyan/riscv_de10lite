@@ -27,25 +27,25 @@ end
 
 endmodule
 
-module m_store(
-  input wire clk,
-  input wire [ 2:0] fun3,
-  input wire [31:0] val,
-  input wire [ 1:0] mod,
-  output reg [31:0] mem_out
-  );
-
-always@(posedge clk)
-begin
-  case (fun3)
-  3'b000:  mem_out[mod*8+7-:8] <= val[ 7:0];
-  3'b001:  mem_out[15:0]       <= val[15:0];
-  3'b010:  mem_out             <= val;
-  default: mem_out             <= 32'b0;
-  endcase
-end
-
-endmodule
+//module m_store(
+//  input wire clk,
+//  input wire [ 2:0] fun3,
+//  input wire [31:0] val,
+//  input wire [ 1:0] mod,
+//  output reg [31:0] mem_out
+//  );
+//
+//always@(posedge clk)
+//begin
+//  case (fun3)
+//  3'b000:  mem_out[mod*8+7-:8] <= val[ 7:0];
+//  3'b001:  mem_out[15:0]       <= val[15:0];
+//  3'b010:  mem_out             <= val;
+//  default: mem_out             <= 32'b0;
+//  endcase
+//end
+//
+//endmodule
 
 module m_arith(
   input  wire clk,
@@ -130,60 +130,63 @@ wire        branch_reg;
 wire [31:0] arith0;
 wire [31:0] arith3;
 wire [31:0] arithlui;
+//wire [31:0] index;
 reg [31:0] x;
 reg [31:0] y;
 reg alt;
-reg [2:0] byte_idx;
 reg [31:0] out;
 reg success = 1'b0;
 reg fail;
 
-function [31:0] idx(input [31:0] addr);
-begin
-  idx = (addr - ENTRY) >> 2;
-end
-endfunction
+//function [31:0] idx(input [31:0] addr);
+//begin
+//  idx = (addr - ENTRY) >> 2;
+//end
+//endfunction
 
-function [31:0] extend(
-  input [ 2:0] fun3_in,
-  input [31:0] val_in,
-  input [ 1:0] mod_in
-  );
-reg [ 1:0] mod;
-reg [31:0] word;
-reg [ 2:0] size;
-begin
-  if (mod_in == 2'b0)
-    word = val_in;
-  else if (mod_in == 2'b10)
-    word = { 16'b0,  val_in[31:16] };
-  else if (mod_in == 2'b1)
-    word = {  8'b0,  val_in[31: 8] };
-  else
-    word = { 24'b0,  val_in[31:24] };
+//assign index = (arith0 - ENTRY) >> 2;
 
-  case (fun3_in)
-  3'b000: extend  = { {25{word[ 7]}}, word[ 6:0] }; // LB
-  3'b001: extend  = { {17{word[15]}}, word[14:0] }; // LH
-  3'b010: extend  = word;                           // LW
-  3'b100: extend  = { 24'b0, word[ 7:0] };          // LBU
-  3'b101: extend  = { 16'b0, word[15:0] };          // LHU
-  default: extend = 32'b0;
-  endcase
-end
-endfunction
+//function [31:0] extend(
+//  input [ 2:0] fun3_in,
+//  input [31:0] val_in,
+//  input [ 1:0] mod_in
+//  );
+//reg [ 1:0] mod;
+//reg [31:0] word;
+//reg [ 2:0] size;
+//begin
+//  if (mod_in == 2'b0)
+//    word = val_in;
+//  else if (mod_in == 2'b10)
+//    word = { 16'b0,  val_in[31:16] };
+//  else if (mod_in == 2'b1)
+//    word = {  8'b0,  val_in[31: 8] };
+//  else
+//    word = { 24'b0,  val_in[31:24] };
+//
+//  case (fun3_in)
+//  3'b000: extend  = { {25{word[ 7]}}, word[ 6:0] }; // LB
+//  3'b001: extend  = { {17{word[15]}}, word[14:0] }; // LH
+//  3'b010: extend  = word;                           // LW
+//  3'b100: extend  = { 24'b0, word[ 7:0] };          // LBU
+//  3'b101: extend  = { 16'b0, word[15:0] };          // LHU
+//  default: extend = 32'b0;
+//  endcase
+//  extend = 32'b0;
+//end
+//endfunction
 
 m_arith  arith_m1 (.clk(clk), .out(arith0),   .fun3(3'b0), .left(x),     .right(y), .alt(alt));
 m_arith  arith_m2 (.clk(clk), .out(arith3),   .fun3(fun3), .left(x),     .right(y), .alt(alt));
 m_arith  arith_m3 (.clk(clk), .out(arithlui), .fun3(3'b0), .left(32'b0), .right(y), .alt(alt));
-m_store  store_1  (.clk(clk), .fun3(fun3),    .val(rgs[rs2]), .mod(arith0[1:0]), .mem_out(store_reg));
+//m_store  store_1  (.clk(clk), .fun3(fun3),    .val(rgs[rs2]), .mod(arith0[1:0]), .mem_out(store_reg));
 m_branch branch_1 (.clk(clk), .fun3(fun3),    .left(rgs[rs1]), .right(rgs[rs2]), .branch_out(branch_reg));
 
 integer i;
 
 initial 
 begin
-  $readmemh("tests/rv32ui-p-sw.dat", mem);
+  $readmemh("tests/rv32ui-p-addi.dat", mem);
 
   for (i = 0; i < 32; i = i + 1)
     rgs[i] <= 32'b0;
@@ -203,7 +206,7 @@ begin
 
   if (~step[0])
   begin
-    ins  <= mem[idx(PC)];
+    ins  <= mem[(PC - ENTRY) >> 2];
     step <= 5'b1;
   end
 
@@ -237,25 +240,25 @@ begin
     $display("step 2: op  %08b fn3 %08b  rd %08d rs1 %08d rs2 %08d", op, fun3, rd, rs1, rs2);
 
     case (op)
-      7'b001_0111: x <= PC;      // op_imm
-      7'b110_0011: x <= PC;      // branch
-      7'b110_1111: x <= PC;      // jal
-      default    : x <= rgs[rs1];
+      OP_IMM  : x <= PC;      // op_imm
+      BRANCH  : x <= PC;      // branch
+      JAL     : x <= PC;      // jal
+      default : x <= rgs[rs1];
     endcase
 
     case (op)
-      7'b000_0011: y <= imm_i;    // load
-      7'b010_0011: y <= imm_s;    // store
-      7'b001_0011: y <= imm_i;    // op_imm
-      7'b011_0011: y <= rgs[rs2]; // op
-      7'b001_0111: y <= imm_u;    // auipc
-      7'b011_0111: y <= imm_u;    // lui
-      7'b110_0011: y <= imm_b;    // branch
-      7'b110_0111: y <= imm_i;    // jalr
-      7'b110_1111: y <= imm_j;    // jal
-      7'b111_0011: y <= imm_i;    // system
-      7'b000_1111: y <= 32'b0;    // misc_mem
-      default:     y <= 32'b0;
+      LOAD    : y <= imm_i;    // load
+      STORE   : y <= imm_s;    // store
+      OP_IMM  : y <= imm_i;    // op_imm
+      OP      : y <= rgs[rs2]; // op
+      AUIPC   : y <= imm_u;    // auipc
+      LUI     : y <= imm_u;    // lui
+      BRANCH  : y <= imm_b;    // branch
+      JALR    : y <= imm_i;    // jalr
+      JAL     : y <= imm_j;    // jal
+      SYSTEM  : y <= imm_i;    // system
+      MISC_MEM: y <= 32'b0;    // misc_mem
+      default : y <= 32'b0;
     endcase
 
     case (op)
@@ -279,11 +282,8 @@ begin
 
   if (step[3])
   begin
-    if (op == LOAD)
-      out <= extend(fun3, mem[idx(arith0)], arith0 % 4);
-    else if (op == STORE)
-      mem[idx(arith0)] <= store_reg;
-    else if (op == OP_IMM || op == OP)
+
+    if (op == OP_IMM || op == OP)
       out <= arith3;
     else if (op == LUI)
       out <= arithlui;
@@ -298,6 +298,9 @@ begin
         fail <= 1'b0;
     else
       out <= 32'b0;
+
+    // LOAD from memory later
+    // out <= mem[idx];
 
     step <= step << 1;
   end
@@ -316,6 +319,9 @@ begin
       else if (op == JALR || op == JAL)
         rgs[rd] <= PC + 4;
     end
+
+    // STORE from memory later
+    // mem[idx] <= store_reg;
 
   // debugging information
     `ifdef DEBUG
