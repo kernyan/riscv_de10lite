@@ -4,60 +4,77 @@
 `define CPU
 //`define DEBUG
 
-module store(
-  input clk,
-  input wire [ 2:0] fun3_in,
-  input wire [31:0] val_in,
-  input wire [ 1:0] mod_in,
-  output reg [31:0] mem_out
+module m_branch(
+  input wire clk,
+  input wire [2:0] fun3,
+  input wire [31:0] left,
+  input wire [31:0] right,
+  output reg branch_out
   );
 
 always@(posedge clk)
 begin
-  case (fun3_in)
-  3'b000: mem_out[mod_in*8+7-:8] = val_in[ 7:0];
-  3'b001: mem_out[15:0] = val_in[15:0];
-  3'b010: mem_out = val_in;
-  default: mem_out = 32'b0;
+  case (fun3)
+    3'b000:  branch_out <= left == right;
+    3'b001:  branch_out <= left != right;
+    3'b100:  branch_out <= $signed(left) <  $signed(right);
+    3'b101:  branch_out <= $signed(left) >= $signed(right);
+    3'b110:  branch_out <= left <  right;
+    3'b111:  branch_out <= left >= right;
+    default: branch_out <= 1'b0;
   endcase
 end
 
 endmodule
 
-module arith(
-  input clk,
-  output reg  [31:0] out,
-  input  wire [ 2:0] fun3_in,
-  input  wire [31:0] x_in,
-  input  wire [31:0] y_in,
-  input  wire alt_in
+module m_store(
+  input wire clk,
+  input wire [ 2:0] fun3,
+  input wire [31:0] val,
+  input wire [ 1:0] mod,
+  output reg [31:0] mem_out
   );
 
 always@(posedge clk)
 begin
-  case (fun3_in)
+  case (fun3)
+  3'b000:  mem_out[mod*8+7-:8] <= val[ 7:0];
+  3'b001:  mem_out[15:0]       <= val[15:0];
+  3'b010:  mem_out             <= val;
+  default: mem_out             <= 32'b0;
+  endcase
+end
+
+endmodule
+
+module m_arith(
+  input  wire clk,
+  output reg  [31:0] out,
+  input  wire [ 2:0] fun3,
+  input  wire [31:0] left,
+  input  wire [31:0] right,
+  input  wire alt
+  );
+
+always@(posedge clk)
+begin
+  case (fun3)
   3'b000:  // ADD
-    if (alt_in)
-      out <= x_in - y_in;
-    else
-      out <= x_in + y_in;
+    out <= (alt) ? left - right : left + right;
   3'b001:  // SLL
-    out <= x_in << y_in[4:0];
+    out <= left << right[4:0];
   3'b010: // SLT
-    out <= $signed(x_in) < $signed(y_in);
+    out <= $signed(left) < $signed(right);
   3'b011: // SLTU
-    out <= x_in < y_in;
+    out <= left < right;
   3'b100: // XOR
-    out <= x_in ^ y_in;
+    out <= left ^ right;
   3'b101: // SRL, SRA
-    if (alt_in)
-      out <= $signed(x_in) >>> y_in;
-    else
-      out <= x_in >> y_in;
+    out <= (alt) ? $signed(left) >>> right : left >> right;
   3'b110: // OR
-    out <= x_in | y_in;
+    out <= left | right;
   3'b111: // AND
-    out <= x_in & y_in;
+    out <= left & right;
   default:
     out <= 32'b0;
   endcase
@@ -109,6 +126,7 @@ reg [ 4:0] rs2;
 reg [4:0] step;
 
 wire [31:0] store_reg;
+wire        branch_reg;
 wire [31:0] arith0;
 wire [31:0] arith3;
 wire [31:0] arithlui;
@@ -127,9 +145,9 @@ end
 endfunction
 
 function [31:0] extend(
-  input wire [ 2:0] fun3_in,
-  input wire [31:0] val_in,
-  input wire [ 1:0] mod_in
+  input [ 2:0] fun3_in,
+  input [31:0] val_in,
+  input [ 1:0] mod_in
   );
 reg [ 1:0] mod;
 reg [31:0] word;
@@ -155,10 +173,11 @@ begin
 end
 endfunction
 
-arith arith_m1 (clk, arith0, 3'b0, x, y, alt);
-arith arith_m2 (clk, arith3, fun3, x, y, alt);
-arith arith_m3 (clk, arithlui, 3'b0, 32'b0, y, alt);
-store store_1 (clk, fun3, rgs[rs2], arith0[1:0], store_reg);
+m_arith  arith_m1 (.clk(clk), .out(arith0),   .fun3(3'b0), .left(x),     .right(y), .alt(alt));
+m_arith  arith_m2 (.clk(clk), .out(arith3),   .fun3(fun3), .left(x),     .right(y), .alt(alt));
+m_arith  arith_m3 (.clk(clk), .out(arithlui), .fun3(3'b0), .left(32'b0), .right(y), .alt(alt));
+m_store  store_1  (.clk(clk), .fun3(fun3),    .val(rgs[rs2]), .mod(arith0[1:0]), .mem_out(store_reg));
+m_branch branch_1 (.clk(clk), .fun3(fun3),    .left(rgs[rs1]), .right(rgs[rs2]), .branch_out(branch_reg));
 
 integer i;
 
@@ -260,24 +279,26 @@ begin
 
   if (step[3])
   begin
-    case (op)
-      7'b000_0011: out <= extend(fun3, mem[idx(arith0)], arith0 % 4); // load
-      7'b010_0011: mem[idx(arith0)] <= store_reg; //store(fun3, rgs[rs2], mem[idx(arith0)], arith0 % 4); // store
-      7'b001_0011: out <= arith3;                // op_imm
-      7'b011_0011: out <= arith3;                // op
-      7'b001_0111: out <= arith0;                // auipc
-      7'b011_0111: out <= arithlui;              // lui
-      7'b110_0011: out <= arith0;                // branch
-      7'b110_0111: out <= arith0 & 32'hfffffffe; // jalr
-      7'b110_1111: out <= arith0;                // jal
-      7'b111_0011:                                // system
-        if (ins == 32'hc0001073) // hack to match test exit condition
-          success <= 1'b1;
-        else if (fun3 == 3'b0 && rgs[3] > 1)      // hack to match test fail condition (gp reg)
-          fail <= 1'b0;
-      default:
-        out <= 32'b0;
-    endcase
+    if (op == LOAD)
+      out <= extend(fun3, mem[idx(arith0)], arith0 % 4);
+    else if (op == STORE)
+      mem[idx(arith0)] <= store_reg;
+    else if (op == OP_IMM || op == OP)
+      out <= arith3;
+    else if (op == LUI)
+      out <= arithlui;
+    else if (op == JALR)
+      out <= arith0 & 32'hfffffffe;
+    else if (op == AUIPC || op == BRANCH || op == JAL)
+      out <= arith0;
+    else if (op == SYSTEM)
+      if (ins == 32'hc0001073)
+        success <= 1'b1;
+      else if (fun3 == 3'b0 && rgs[3] > 1)
+        fail <= 1'b0;
+    else
+      out <= 32'b0;
+
     step <= step << 1;
   end
 
@@ -319,23 +340,10 @@ begin
 
   // jump
 
-    case (op)
-      7'b110_1111: // JAL
-        PC <= out;
-      7'b110_0111: // JALR
-        PC <= out;
-      7'b110_0011: // BRANCH
-        case (fun3)
-        3'b000: if (rgs[rs1] == rgs[rs2])                   PC <= out; else PC <= PC + 4; // BEQ
-        3'b001: if (rgs[rs1] != rgs[rs2])                   PC <= out; else PC <= PC + 4; // BNE
-        3'b100: if ($signed(rgs[rs1])  < $signed(rgs[rs2])) PC <= out; else PC <= PC + 4; // BLT
-        3'b101: if ($signed(rgs[rs1]) >= $signed(rgs[rs2])) PC <= out; else PC <= PC + 4; // BGE
-        3'b110: if (rgs[rs1]  < rgs[rs2])                   PC <= out; else PC <= PC + 4; // BLTU
-        3'b111: if (rgs[rs1] >= rgs[rs2])                   PC <= out; else PC <= PC + 4; // BGEU
-        endcase
-      default:
-        PC <= PC + 4;
-    endcase
+    if (op == JAL || op == JALR || (op == BRANCH && branch_reg))
+      PC <= out;
+    else
+      PC <= PC + 4;
 
     step <= 5'b1;
   end
