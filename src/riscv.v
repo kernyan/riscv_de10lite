@@ -73,8 +73,20 @@ module riscv_i (
   output ser_tx
   );
 
-localparam MEMSIZE = 2055;
+localparam MEMSIZE = 4095;
 localparam ENTRY   = 'h8000_0000;
+
+localparam LOAD     = 7'b000_0011;
+localparam OP_IMM   = 7'b001_0011;
+localparam OP       = 7'b011_0011;
+localparam AUIPC    = 7'b001_0111;
+localparam LUI      = 7'b011_0111;
+localparam JALR     = 7'b110_0111;
+localparam JAL      = 7'b110_1111;
+localparam STORE    = 7'b010_0011;
+localparam BRANCH   = 7'b110_0011;
+localparam SYSTEM   = 7'b111_0011;
+localparam MISC_MEM = 7'b000_1111;
 
 reg [31:0] mem[0:MEMSIZE];
 reg [31:0] PC;
@@ -115,9 +127,9 @@ end
 endfunction
 
 function [31:0] extend(
-  input [ 2:0] fun3_in,
-  input [31:0] val_in,
-  input [ 1:0] mod_in
+  input wire [ 2:0] fun3_in,
+  input wire [31:0] val_in,
+  input wire [ 1:0] mod_in
   );
 reg [ 1:0] mod;
 reg [31:0] word;
@@ -133,11 +145,12 @@ begin
     word = { 24'b0,  val_in[31:24] };
 
   case (fun3_in)
-  3'b000: extend = { {25{word[ 7]}}, word[ 6:0] }; // LB
-  3'b001: extend = { {17{word[15]}}, word[14:0] }; // LH
-  3'b010: extend = word;                           // LW
-  3'b100: extend = { 24'b0, word[ 7:0] };          // LBU
-  3'b101: extend = { 16'b0, word[15:0] };          // LHU
+  3'b000: extend  = { {25{word[ 7]}}, word[ 6:0] }; // LB
+  3'b001: extend  = { {17{word[15]}}, word[14:0] }; // LH
+  3'b010: extend  = word;                           // LW
+  3'b100: extend  = { 24'b0, word[ 7:0] };          // LBU
+  3'b101: extend  = { 16'b0, word[15:0] };          // LHU
+  default: extend = 32'b0;
   endcase
 end
 endfunction
@@ -151,14 +164,14 @@ integer i;
 
 initial 
 begin
-  $readmemh("tests/rv32ui-p-fence_i.dat", mem);
+  $readmemh("tests/rv32ui-p-sw.dat", mem);
 
   for (i = 0; i < 32; i = i + 1)
     rgs[i] <= 32'b0;
 end
 
 `ifdef CPU
-always @(posedge clk or reset)
+always @(posedge clk)
 begin
 
   if (reset)
@@ -276,15 +289,12 @@ begin
     $display("step 3: out %h   x %h   y %h alt %08b ar0 %h ar3 %h arl %h", out, x, y, alt, arith0, arith3, arithlui);
 
     if (~rd)
-      case (op)
-        7'b000_0011: rgs[rd] <= out; // load
-        7'b001_0011: rgs[rd] <= out; // op_imm
-        7'b011_0011: rgs[rd] <= out; // op
-        7'b001_0111: rgs[rd] <= out; // auipc
-        7'b011_0111: rgs[rd] <= out; // lui
-        7'b110_0111: rgs[rd] <= PC + 4; // jalr
-        7'b110_1111: rgs[rd] <= PC + 4; // jal
-      endcase
+    begin
+      if (op == LOAD || op == OP_IMM || op == OP || op == AUIPC || op == LUI)
+        rgs[rd] <= out;
+      else if (op == JALR || op == JAL)
+        rgs[rd] <= PC + 4;
+    end
 
   // debugging information
     `ifdef DEBUG

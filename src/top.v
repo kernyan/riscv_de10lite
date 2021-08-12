@@ -2,7 +2,7 @@
 
 `default_nettype none
 
-`define SIM 
+//`define SIM 
 
 module riscv_cpu (
   input Clk,
@@ -13,7 +13,7 @@ module riscv_cpu (
 	);
 
 reg Clk50 = 1'b0;
-reg ResetInput = 1'b1;
+//reg ResetInput = 1'b1;
 
 `ifdef SIM
 initial begin
@@ -29,8 +29,8 @@ always@(posedge Clk)
 
 reg ClkDiv = 1'b0;
 //reg [21:0] Ctr = 22'b0; // 50 Mhz / 2 ^ 23 ~ 6 Hz
-//reg [16:0] Ctr = 17'b0; // 50 Mhz / 2 ^ 18 ~ 190 Hz
-reg [3:0] Ctr = 4'b0; // 50 Mhz / 2 ^ 18 ~ 190 Hz
+reg [16:0] Ctr = 17'b0; // 50 Mhz / 2 ^ 18 ~ 190 Hz
+//reg [3:0] Ctr = 4'b0; // 50 Mhz / 2 ^ 18 ~ 190 Hz
 
 always@(posedge Clk50) begin
   { ClkDiv, Ctr } <= Ctr + 1'b1;
@@ -38,8 +38,8 @@ always@(posedge Clk50) begin
 
 riscv_i cpu_i(
     .clk   (ClkDiv),
-    //.reset (Switch[0]),
-    .reset (ResetInput),
+    .reset (Switch[0]),
+    //.reset (ResetInput),
     .led   (Led_Out),
     .ser_tx(Uart_Tx),
     .ser_rx(Uart_Rx)
