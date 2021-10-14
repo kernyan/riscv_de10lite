@@ -4,6 +4,9 @@ riscv uart implementation on de10 lite FPGA board
 ### background
 Part of project to build cpu chip to run [KernOS](https://github.com/kernyan/KernOS)
 
+## preliminary work
+1. a [python riscv emulator](pycpu/cpu.py) is first done to "extract" requirements for verilog implementation
+
 ## components
 1. [uart](src/simpleuart.v)  
 2. [riscv cpu](src/riscv.v)
@@ -22,6 +25,10 @@ Part of project to build cpu chip to run [KernOS](https://github.com/kernyan/Ker
 ```bash
 scripts/go.sh
 ```
+## limitations
+1. doesn't support floating point instructions
+2. doesn't support unaligned load/stores
+
 ## todo
 1. reimplement uart module
 
