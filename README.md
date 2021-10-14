@@ -22,8 +22,7 @@ Part of project to build cpu chip to run [KernOS](https://github.com/kernyan/Ker
 scripts/go.sh
 ```
 ## todo
-1. reimplement riscv module
-2. reimplement uart module
+1. reimplement uart module
 
 ## reference
 1. [geohot/tinygrad](https://github.com/geohot/tinygrad/tree/master/accel/fpga)
