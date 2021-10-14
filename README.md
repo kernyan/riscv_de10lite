@@ -5,8 +5,9 @@ riscv uart implementation on de10 lite FPGA board
 Part of project to build cpu chip to run [KernOS](https://github.com/kernyan/KernOS)
 
 ## components
-1. uart
-2. riscv [picosov](https://github.com/cliffordwolf/picorv32)
+1. [uart] (src/simpleuart.v)  
+2. [riscv cpu](src/riscv.v)
+3. [firmware](src/main.c)
 
 ## pins
 1. uart receive  - PIN_V10 GPIO[0]
