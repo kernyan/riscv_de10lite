@@ -5,7 +5,7 @@ riscv uart implementation on de10 lite FPGA board
 Part of project to build cpu chip to run [KernOS](https://github.com/kernyan/KernOS)
 
 ## python emulation
-1. a [python riscv emulator](pycpu/cpu.py) is first done to "extract" requirements for verilog implementation
+1. a [python riscv emulator](py_cpu/cpu.py) is first done to "extract" requirements for verilog implementation
 
 ## FPGA components
 1. [uart](src/simpleuart.v)  
