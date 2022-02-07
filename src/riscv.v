@@ -186,7 +186,8 @@ integer i;
 
 initial 
 begin
-  $readmemh("tests/rv32ui-p-addi.dat", mem);
+  //$readmemh("tests/rv32ui-p-addi.dat", mem);
+  $readmemh("src/firmware.hex", mem);
 
   for (i = 0; i < 32; i = i + 1)
     rgs[i] <= 32'b0;

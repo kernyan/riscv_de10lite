@@ -8,5 +8,23 @@
 ## on linux
 1. by default, usb-uart device might not have write access
   - lsusb to check usb-uart device
-  - ll /dev/usb/bus_id
+  - ll /dev/bus/usb/bus_id
   - chmod 666 'device_id'
+
+
+/dev/bus/usb/008
+/etc/udev/rules.d/51-usbblaster.rules
+
+# USB-Blaster
+SUBSYSTEM=="usb", ATTR{idVendor}=="09fb", ATTR{idProduct}=="6001", MODE="0666", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTR{idVendor}=="09fb", ATTR{idProduct}=="6002", MODE="0666", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTR{idVendor}=="09fb", ATTR{idProduct}=="6003", MODE="0666", GROUP="plugdev"
+
+# USB-Blaster II
+SUBSYSTEM=="usb", ATTR{idVendor}=="09fb", ATTR{idProduct}=="6010", MODE="0666", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTR{idVendor}=="09fb", ATTR{idProduct}=="6810", MODE="0666", GROUP="plugdev"
+
+## fix for quartus jtag broken chain
+ ln -s /lib64/libudev.so.1 /lib64/libudev.so.0 or
+ ln -s /usr/lib/x86_64-linux-gnu/libudev.so.1 /usr/lib/x86_64-linux-gnu/libudev.so.0
+

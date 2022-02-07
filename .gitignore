@@ -1,0 +1,7 @@
+build/
+db/
+env/
+incremental_db/
+output_files/
+simulation/
+*.swp

@@ -1,2 +1,3 @@
+pyelftools
 pyftdi
 libusb1

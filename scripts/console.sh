@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 #from pyftdi.ftdi import Ftdi
 import pyftdi.serialext
+import struct
 
 #Ftdi.show_devices() # use this to obtain url
 
@@ -14,4 +15,10 @@ print(port)
 while 1:
   data = port.read(1)
   if len(data):
-    print(data.decode('utf-8'))
+    s = '_'.join(chr(data[i]) + f'_{data[i]}_' + bin(data[i])[2:] for i in range(len(data)))
+    print(s)
+    #try:
+    #  print(data.decode('utf-8'))
+    #except:
+    #  s = '_'.join(chr(data[i]) + f'_{data[i]}_' + bin(data[i])[2:] for i in range(len(data)))
+    #  print(s)
